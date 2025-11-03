@@ -12,6 +12,8 @@
 #include "RHI/VulkanDescriptorPool.hpp"
 #include "RHI/VulkanShaderBindingTable.hpp"
 
+#include "Events.hpp"
+
 namespace PathTracer {
 
     class Application
@@ -21,8 +23,13 @@ namespace PathTracer {
         ~Application() = default;
 
         void Run();
+
+    private:
+        void ProcessEvents();
     
     private:
+        std::unique_ptr<EventQueue> m_EventQueue;
+
         std::shared_ptr<VulkanContext> m_Context;
         std::shared_ptr<VulkanDevice> m_Device;
         std::shared_ptr<VulkanCommand> m_Command;

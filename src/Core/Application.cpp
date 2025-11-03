@@ -17,6 +17,8 @@ namespace PathTracer {
 
     Application::Application()
     {
+        m_EventQueue = std::make_unique<EventQueue>();
+
         m_Context = std::make_shared<VulkanContext>();
         m_Device = std::make_shared<VulkanDevice>(m_Context);
         m_Command = std::make_shared<VulkanCommand>(m_Device);
@@ -211,6 +213,13 @@ namespace PathTracer {
         }
 
         m_StagingBuffer->Unmap();
+    }
+
+    void Application::ProcessEvents()
+    {
+        for (auto& event : m_EventQueue->Poll()) {
+            EventDispatcher dispathcer(event);
+        }
     }
 
 }
