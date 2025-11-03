@@ -43,6 +43,9 @@ add_executable(${PROJECT_NAME}
     src/Core/Window.hpp
     src/Core/Window.cpp
 
+    src/Renderer/Renderer.hpp
+    src/Renderer/Renderer.cpp
+
     src/RHI/VulkanTypes.hpp
     src/RHI/VulkanContext.hpp
     src/RHI/VulkanContext.cpp
