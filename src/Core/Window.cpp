@@ -145,6 +145,14 @@ namespace PathTracer {
         }
     }
 
+    std::vector<const char*> Window::GetRequiredVulkanExtensions()
+    {
+        u32 count = 0;
+        const char** extensions = glfwGetRequiredInstanceExtensions(&count);
+
+        return std::vector<const char*>(extensions, extensions + count);
+    }
+
     void Window::PollEvents()
     {
         glfwPollEvents();

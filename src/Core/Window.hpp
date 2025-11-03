@@ -34,6 +34,8 @@ namespace PathTracer {
             m_Data.queue = queue;
         }
 
+        static std::vector<const char*> GetRequiredVulkanExtensions();
+
     protected:
         static void PollEvents();
 

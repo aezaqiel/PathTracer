@@ -18,7 +18,7 @@ namespace PathTracer {
         m_Width = m_Window->GetWidth();
         m_Height = m_Window->GetHeight();
 
-        m_Context = std::make_shared<VulkanContext>();
+        m_Context = std::make_shared<VulkanContext>(m_Window);
         m_Device = std::make_shared<VulkanDevice>(m_Context);
         m_Command = std::make_shared<VulkanCommand>(m_Device);
 
