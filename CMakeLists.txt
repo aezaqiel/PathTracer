@@ -27,6 +27,7 @@ endif()
 add_subdirectory(thirdparty/volk)
 add_subdirectory(thirdparty/glm)
 add_subdirectory(thirdparty/vma)
+add_subdirectory(thirdparty/spdlog)
 
 add_executable(${PROJECT_NAME}
     src/Main.cpp
@@ -78,6 +79,7 @@ PRIVATE
     volk
     glm
     VulkanMemoryAllocator 
+    spdlog
 )
 
 target_compile_definitions(${PROJECT_NAME}
