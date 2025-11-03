@@ -20,6 +20,10 @@ namespace PathTracer {
 
         m_Context = std::make_shared<VulkanContext>(m_Window);
         m_Device = std::make_shared<VulkanDevice>(m_Context);
+
+        m_Swapchain = std::make_shared<VulkanSwapchain>(m_Context, m_Device);
+        m_Swapchain->Recreate(m_Width, m_Height);
+
         m_Command = std::make_shared<VulkanCommand>(m_Device);
 
         m_StorageImage = std::make_shared<VulkanImage>(m_Device, VulkanImage::Spec {
@@ -291,6 +295,8 @@ namespace PathTracer {
 
         m_Width = request.width;
         m_Height = request.height;
+
+        m_Swapchain->Recreate(request.width, request.height);
     }
 
 }

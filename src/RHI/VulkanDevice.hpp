@@ -21,16 +21,16 @@ namespace PathTracer {
         inline u32 GetQueueFamilyIndex() const { return m_QueueIndices.compute.value(); }
         inline VkQueue GetQueueFamily() const { return m_ComputeQueue; }
 
-        inline const VkQueue& GetGraphicsQueue() const { return m_GraphicsQueue; }
+        inline VkQueue GetGraphicsQueue() const { return m_GraphicsQueue; }
         inline u32 GetGraphicsQueueIndex() const { return m_QueueIndices.graphics.value(); }
 
-        inline const VkQueue& GetPresentQueue() const { return m_PresentQueue; }
+        inline VkQueue GetPresentQueue() const { return m_PresentQueue; }
         inline u32 GetPresentQueueIndex() const { return m_QueueIndices.present.value(); }
 
-        inline const VkQueue& GetComputeQueue() const { return m_ComputeQueue; }
+        inline VkQueue GetComputeQueue() const { return m_ComputeQueue; }
         inline u32 GetComputeQueueIndex() const { return m_QueueIndices.compute.value(); }
 
-        inline const VkQueue& GetTransferQueue() const { return m_TransferQueue; }
+        inline VkQueue GetTransferQueue() const { return m_TransferQueue; }
         inline u32 GetTransferQueueIndex() const { return m_QueueIndices.transfer.value(); }
 
         inline VmaAllocator GetAllocator() const { return m_Allocator; }

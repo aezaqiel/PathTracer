@@ -53,6 +53,8 @@ add_executable(${PROJECT_NAME}
     src/RHI/VulkanContext.cpp
     src/RHI/VulkanDevice.hpp
     src/RHI/VulkanDevice.cpp
+    src/RHI/VulkanSwapchain.hpp
+    src/RHI/VulkanSwapchain.cpp
     src/RHI/VulkanCommand.hpp
     src/RHI/VulkanCommand.cpp
     src/RHI/VulkanImage.hpp

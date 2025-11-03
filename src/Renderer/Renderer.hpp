@@ -4,6 +4,7 @@
 
 #include "RHI/VulkanContext.hpp"
 #include "RHI/VulkanDevice.hpp"
+#include "RHI/VulkanSwapchain.hpp"
 #include "RHI/VulkanCommand.hpp"
 #include "RHI/VulkanImage.hpp"
 #include "RHI/VulkanBuffer.hpp"
@@ -65,6 +66,7 @@ namespace PathTracer {
 
         std::shared_ptr<VulkanContext> m_Context;
         std::shared_ptr<VulkanDevice> m_Device;
+        std::shared_ptr<VulkanSwapchain> m_Swapchain;
         std::shared_ptr<VulkanCommand> m_Command;
 
         std::shared_ptr<VulkanImage> m_StorageImage;
