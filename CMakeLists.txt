@@ -28,6 +28,7 @@ add_subdirectory(thirdparty/volk)
 add_subdirectory(thirdparty/glm)
 add_subdirectory(thirdparty/vma)
 add_subdirectory(thirdparty/spdlog)
+add_subdirectory(thirdparty/glfw)
 
 add_executable(${PROJECT_NAME}
     src/Main.cpp
@@ -82,6 +83,7 @@ PRIVATE
     glm
     VulkanMemoryAllocator 
     spdlog
+    glfw
 )
 
 target_compile_definitions(${PROJECT_NAME}
@@ -89,7 +91,15 @@ PRIVATE
     _CRT_SECURE_NO_WARNINGS
     NOMINMAX
     SHADER_DIR=\"${SHADER_BIN_DIR}\"
+    GLFW_INCLUDE_NONE
 )
+
+if(WIN32)
+    target_compile_definitions(${PROJECT_NAME}
+    PRIVATE
+        GLFW_EXPOSE_NATIVE_WIN32
+    )
+endif()
 
 target_precompile_headers(${PROJECT_NAME}
 PRIVATE
