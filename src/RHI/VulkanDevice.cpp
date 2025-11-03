@@ -1,6 +1,7 @@
 #include "VulkanDevice.hpp"
 
 #include "VulkanContext.hpp"
+#include "Core/Logger.hpp"
 
 namespace PathTracer {
 
@@ -46,7 +47,7 @@ namespace PathTracer {
                 m_PhysicalDevice = device;
                 m_QueueFamilyIndex = index.value();
 
-                std::println("Using {}", props.properties.deviceName);
+                LOG_INFO("Using {}", props.properties.deviceName);
                 break;
             }
         }

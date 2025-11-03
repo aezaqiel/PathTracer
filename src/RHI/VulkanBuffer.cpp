@@ -1,5 +1,7 @@
 #include "VulkanBuffer.hpp"
 
+#include "Core/Logger.hpp"
+
 namespace PathTracer {
 
     VulkanBuffer::VulkanBuffer(std::shared_ptr<VulkanDevice> device, const Spec& spec)
@@ -53,7 +55,7 @@ namespace PathTracer {
     void* VulkanBuffer::Map(VkDeviceSize size, VkDeviceSize offset)
     {
         if (m_MappedData) {
-            std::println("Buffer memory already mapped, unmapping old data...");
+            LOG_WARN("Buffer memory already mapped, unmapping old data...");
             Unmap();
         }
 
@@ -68,7 +70,7 @@ namespace PathTracer {
             vmaUnmapMemory(m_Device->GetAllocator(), m_Allocation);
             m_MappedData = nullptr;
         } else {
-            std::println("No memory mapped to buffer");
+            LOG_WARN("No memory mapped to buffer");
         }
     }
 

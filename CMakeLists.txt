@@ -35,6 +35,8 @@ add_executable(${PROJECT_NAME}
     src/Core/Types.hpp
     src/Core/Application.hpp
     src/Core/Application.cpp
+    src/Core/Logger.hpp
+    src/Core/Logger.cpp
 
     src/RHI/VulkanTypes.hpp
     src/RHI/VulkanContext.hpp

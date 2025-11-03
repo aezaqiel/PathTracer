@@ -1,5 +1,7 @@
 #include "VulkanShaderBindingTable.hpp"
 
+#include "Core/Logger.hpp"
+
 namespace PathTracer {
 
     VulkanShaderBindingTable::Builder::Builder(std::shared_ptr<VulkanDevice> device, std::shared_ptr<VulkanRayTracingPipeline> pipeline)
@@ -18,7 +20,7 @@ namespace PathTracer {
 
         const u32 shaderRecordDataSize = entryStride - handleSize;
         if (size > shaderRecordDataSize) {
-            std::println("Raygen group size > shader record data size");
+            LOG_ERROR("Raygen group size > shader record data size");
         }
 
         std::vector<u8> record(shaderRecordDataSize, 0);
@@ -42,7 +44,7 @@ namespace PathTracer {
 
         const u32 shaderRecordDataSize = entryStride - handleSize;
         if (size > shaderRecordDataSize) {
-            std::println("Miss group size > shader record data size");
+            LOG_ERROR("Miss group size > shader record data size");
         }
 
         std::vector<u8> record(shaderRecordDataSize, 0);
@@ -66,7 +68,7 @@ namespace PathTracer {
 
         const u32 shaderRecordDataSize = entryStride - handleSize;
         if (size > shaderRecordDataSize) {
-            std::println("Hit group size > shader record data size");
+            LOG_ERROR("Hit group size > shader record data size");
         }
 
         std::vector<u8> record(shaderRecordDataSize, 0);

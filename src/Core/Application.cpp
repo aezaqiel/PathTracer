@@ -3,6 +3,7 @@
 #include <stb_image_write.h>
 
 #include "RHI/VulkanDescriptorWriter.hpp"
+#include "Core/Logger.hpp"
 
 namespace PathTracer {
 
@@ -204,7 +205,9 @@ namespace PathTracer {
         stbi_flip_vertically_on_write(true);
 
         if (stbi_write_png("output.png", WIDTH, HEIGHT, 4, m_StagingBuffer->Map(), WIDTH * 4)) {
-            std::println("Render saved to output.png");
+            LOG_INFO("Render saved to output.png");
+        } else {
+            LOG_ERROR("Failed to save image");
         }
 
         m_StagingBuffer->Unmap();

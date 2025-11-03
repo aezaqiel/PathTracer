@@ -1,6 +1,7 @@
 #pragma once
 
 #include "VulkanDevice.hpp"
+#include "Core/Logger.hpp"
 
 namespace PathTracer {
 
@@ -28,7 +29,7 @@ namespace PathTracer {
         inline const VkDescriptorSetLayoutBinding& GetBinding(u32 binding) const
         {
             if (m_Bindings.find(binding) == m_Bindings.end()) {
-                std::println(std::cerr, "Binding not found in descriptor set layout");
+                LOG_ERROR("Binding not found in descriptor set layout");
             }
             return m_Bindings.at(binding);
         }

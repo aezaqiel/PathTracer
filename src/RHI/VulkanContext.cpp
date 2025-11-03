@@ -1,6 +1,7 @@
 #include "VulkanContext.hpp"
 
 #include "Core/Types.hpp"
+#include "Core/Logger.hpp"
 
 namespace PathTracer {
 
@@ -14,7 +15,7 @@ namespace PathTracer {
 
         u32 version = volkGetInstanceVersion();
 
-        std::println("Vulkan version: {}.{}.{}", VK_VERSION_MAJOR(version), VK_VERSION_MINOR(version), VK_VERSION_PATCH(version));
+        LOG_INFO("Vulkan version: {}.{}.{}", VK_VERSION_MAJOR(version), VK_VERSION_MINOR(version), VK_VERSION_PATCH(version));
 
         VkApplicationInfo info {
             .sType = VK_STRUCTURE_TYPE_APPLICATION_INFO,

@@ -1,5 +1,7 @@
 #include "VulkanShader.hpp"
 
+#include "Core/Logger.hpp"
+
 namespace PathTracer {
 
     VulkanShader::VulkanShader(std::shared_ptr<VulkanDevice> device, VkShaderStageFlagBits stage, const std::string& filename)
@@ -27,7 +29,7 @@ namespace PathTracer {
     {
         std::ifstream file(filepath, std::ios::ate | std::ios::binary);
         if (!file.is_open()) {
-            std::println(std::cerr, "Failed to open file {}", filepath);
+            LOG_ERROR("Failed to open file {}", filepath);
             std::abort();
         }
 
