@@ -4,7 +4,7 @@
 
 #include "VulkanDevice.hpp"
 #include "VulkanBuffer.hpp"
-#include "VulkanCommand.hpp"
+#include "VulkanCommandManager.hpp"
 
 namespace PathTracer {
 
@@ -45,7 +45,7 @@ namespace PathTracer {
         };
 
     public:
-        VulkanBLAS(std::shared_ptr<VulkanDevice> device, const std::shared_ptr<VulkanCommand>& command, const std::vector<BLASGeometry>& geometries);
+        VulkanBLAS(std::shared_ptr<VulkanDevice> device, const std::shared_ptr<VulkanCommandManager>& command, const std::vector<BLASGeometry>& geometries);
         virtual ~VulkanBLAS() = default;
     };
 
@@ -63,7 +63,7 @@ namespace PathTracer {
         };
 
     public:
-        VulkanTLAS(std::shared_ptr<VulkanDevice> device, const std::shared_ptr<VulkanCommand>& command, const std::vector<TLASInstance>& instances);
+        VulkanTLAS(std::shared_ptr<VulkanDevice> device, const std::shared_ptr<VulkanCommandManager>& command, const std::vector<TLASInstance>& instances);
         virtual ~VulkanTLAS() = default;
     };
 

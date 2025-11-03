@@ -75,9 +75,15 @@ namespace PathTracer {
             });
         }
 
+        VkPhysicalDeviceSwapchainMaintenance1FeaturesKHR swapchainMaintenance1 {
+            .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SWAPCHAIN_MAINTENANCE_1_FEATURES_KHR,
+            .pNext = nullptr,
+            .swapchainMaintenance1 = VK_TRUE
+        };
+
         VkPhysicalDeviceBufferDeviceAddressFeatures bufferDeviceAddress {
             .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_BUFFER_DEVICE_ADDRESS_FEATURES,
-            .pNext = nullptr,
+            .pNext = &swapchainMaintenance1,
             .bufferDeviceAddress = VK_TRUE,
             .bufferDeviceAddressCaptureReplay = VK_FALSE,
             .bufferDeviceAddressMultiDevice = VK_FALSE

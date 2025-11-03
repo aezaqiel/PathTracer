@@ -24,7 +24,7 @@ namespace PathTracer {
         m_Swapchain = std::make_shared<VulkanSwapchain>(m_Context, m_Device);
         m_Swapchain->Recreate(m_Width, m_Height);
 
-        m_Command = std::make_shared<VulkanCommand>(m_Device);
+        m_CommandManager = std::make_shared<VulkanCommandManager>(m_Device, m_Swapchain);
 
         m_StorageImage = std::make_shared<VulkanImage>(m_Device, VulkanImage::Spec {
             .width = m_Width,
@@ -74,7 +74,7 @@ namespace PathTracer {
             }
         };
 
-        m_BLAS = std::make_shared<VulkanBLAS>(m_Device, m_Command, blasGeometries);
+        m_BLAS = std::make_shared<VulkanBLAS>(m_Device, m_CommandManager, blasGeometries);
 
         std::vector<VulkanTLAS::TLASInstance> tlasInstances {
             {
@@ -87,7 +87,7 @@ namespace PathTracer {
             }
         };
 
-        m_TLAS = std::make_shared<VulkanTLAS>(m_Device, m_Command, tlasInstances);
+        m_TLAS = std::make_shared<VulkanTLAS>(m_Device, m_CommandManager, tlasInstances);
 
         std::vector<VkDescriptorPoolSize> poolSizes {
             {
@@ -140,8 +140,6 @@ namespace PathTracer {
         if (m_RenderThread.joinable())
             m_RenderThread.join();
 
-        stbi_flip_vertically_on_write(true);
-
         if (stbi_write_png("output.png", m_Width, m_Height, 4, m_StagingBuffer->Map(), m_Width * 4)) {
             LOG_INFO("Render saved to output.png");
         } else {
@@ -150,6 +148,7 @@ namespace PathTracer {
 
         m_StagingBuffer->Unmap();
 
+        m_CommandManager->WaitIdle();
     }
 
     void Renderer::RequestResize(u32 width, u32 height)
@@ -212,80 +211,173 @@ namespace PathTracer {
 
     void Renderer::Draw(const RenderPacket& packet)
     {
-        m_Command->SubmitOnce([&](VkCommandBuffer cmd) {
-            VkImageMemoryBarrier imageBarrier {
-                .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
+        if (const auto& frame = m_CommandManager->BeginFrame()) {
+            VkCommandBufferBeginInfo beginInfo
+            {
+                .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
                 .pNext = nullptr,
-                .srcAccessMask = VK_ACCESS_NONE,
-                .dstAccessMask = VK_ACCESS_SHADER_WRITE_BIT,
-                .oldLayout = VK_IMAGE_LAYOUT_UNDEFINED,
-                .newLayout = VK_IMAGE_LAYOUT_GENERAL,
-                .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-                .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-                .image = m_StorageImage->GetImage(),
-                .subresourceRange = {
-                    .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
-                    .baseMipLevel = 0,
-                    .levelCount = 1,
-                    .baseArrayLayer = 0,
-                    .layerCount = 1
-                }
+                .flags = 0,
+                .pInheritanceInfo = nullptr
             };
 
-            vkCmdPipelineBarrier(cmd,
-                VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
-                VK_PIPELINE_STAGE_RAY_TRACING_SHADER_BIT_KHR,
-                0,
-                0, nullptr,
-                0, nullptr,
-                1, &imageBarrier
-            );
+            { // Transfer Commands
+                VK_CHECK(vkBeginCommandBuffer(frame->transferBuffer, &beginInfo));
+                VK_CHECK(vkEndCommandBuffer(frame->transferBuffer));
+            }
 
-            vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR, m_Pipeline->GetPipeline());
-            vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR, m_PipelineLayout->GetLayout(), 0, 1, &m_DescriptorSet, 0, nullptr);
+            { // Compute Commands
+                VK_CHECK(vkBeginCommandBuffer(frame->computeBuffer, &beginInfo));
 
-            VkStridedDeviceAddressRegionKHR rgenRegion = m_SBT->GetRayGenRegion();
-            VkStridedDeviceAddressRegionKHR missRegion = m_SBT->GetMissRegion();
-            VkStridedDeviceAddressRegionKHR hitRegion = m_SBT->GetHitRegion();
-            VkStridedDeviceAddressRegionKHR callableRegion = m_SBT->GetCallbableRegion();
+                VkImageMemoryBarrier imageBarrier {
+                    .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
+                    .pNext = nullptr,
+                    .srcAccessMask = VK_ACCESS_NONE,
+                    .dstAccessMask = VK_ACCESS_SHADER_WRITE_BIT,
+                    .oldLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+                    .newLayout = VK_IMAGE_LAYOUT_GENERAL,
+                    .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+                    .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+                    .image = m_StorageImage->GetImage(),
+                    .subresourceRange = {
+                        .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+                        .baseMipLevel = 0,
+                        .levelCount = 1,
+                        .baseArrayLayer = 0,
+                        .layerCount = 1
+                    }
+                };
 
-            vkCmdTraceRaysKHR(cmd, &rgenRegion, &missRegion, &hitRegion, &callableRegion, m_Width, m_Height, 1);
+                vkCmdPipelineBarrier(frame->computeBuffer,
+                    VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
+                    VK_PIPELINE_STAGE_RAY_TRACING_SHADER_BIT_KHR,
+                    0,
+                    0, nullptr,
+                    0, nullptr,
+                    1, &imageBarrier
+                );
 
-            imageBarrier.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
-            imageBarrier.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
-            imageBarrier.oldLayout = VK_IMAGE_LAYOUT_GENERAL;
-            imageBarrier.newLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+                vkCmdBindPipeline(frame->computeBuffer, VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR, m_Pipeline->GetPipeline());
+                vkCmdBindDescriptorSets(frame->computeBuffer, VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR, m_PipelineLayout->GetLayout(), 0, 1, &m_DescriptorSet, 0, nullptr);
 
-            vkCmdPipelineBarrier(cmd,
-                VK_PIPELINE_STAGE_RAY_TRACING_SHADER_BIT_KHR,
-                VK_PIPELINE_STAGE_TRANSFER_BIT,
-                0,
-                0, nullptr,
-                0, nullptr,
-                1, &imageBarrier
-            );
+                VkStridedDeviceAddressRegionKHR rgenRegion = m_SBT->GetRayGenRegion();
+                VkStridedDeviceAddressRegionKHR missRegion = m_SBT->GetMissRegion();
+                VkStridedDeviceAddressRegionKHR hitRegion = m_SBT->GetHitRegion();
+                VkStridedDeviceAddressRegionKHR callableRegion = m_SBT->GetCallbableRegion();
 
-            VkBufferImageCopy region {
-                .bufferOffset = 0,
-                .bufferRowLength = 0,
-                .bufferImageHeight = 0,
-                .imageSubresource = {
-                    .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
-                    .mipLevel = 0,
-                    .baseArrayLayer = 0,
-                    .layerCount = 1
-                },
-                .imageOffset = { 0, 0, 0 },
-                .imageExtent = { m_Width, m_Height, 1 }
-            };
+                vkCmdTraceRaysKHR(frame->computeBuffer, &rgenRegion, &missRegion, &hitRegion, &callableRegion, m_Width, m_Height, 1);
 
-            vkCmdCopyImageToBuffer(cmd,
-                m_StorageImage->GetImage(),
-                VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-                m_StagingBuffer->GetBuffer(),
-                1, &region
-            );
-        });
+                imageBarrier.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
+                imageBarrier.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+                imageBarrier.oldLayout = VK_IMAGE_LAYOUT_GENERAL;
+                imageBarrier.newLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+
+                vkCmdPipelineBarrier(frame->computeBuffer,
+                    VK_PIPELINE_STAGE_RAY_TRACING_SHADER_BIT_KHR,
+                    VK_PIPELINE_STAGE_TRANSFER_BIT,
+                    0,
+                    0, nullptr,
+                    0, nullptr,
+                    1, &imageBarrier
+                );
+
+                VkBufferImageCopy region {
+                    .bufferOffset = 0,
+                    .bufferRowLength = 0,
+                    .bufferImageHeight = 0,
+                    .imageSubresource = {
+                        .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+                        .mipLevel = 0,
+                        .baseArrayLayer = 0,
+                        .layerCount = 1
+                    },
+                    .imageOffset = { 0, 0, 0 },
+                    .imageExtent = { m_Width, m_Height, 1 }
+                };
+
+                vkCmdCopyImageToBuffer(frame->computeBuffer,
+                    m_StorageImage->GetImage(),
+                    VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                    m_StagingBuffer->GetBuffer(),
+                    1, &region
+                );
+
+                VK_CHECK(vkEndCommandBuffer(frame->computeBuffer));
+            }
+
+            { // Graphics Commands
+                VK_CHECK(vkBeginCommandBuffer(frame->graphicsBuffer, &beginInfo));
+
+                VkImageMemoryBarrier swapchainImageBarrier {
+                    .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
+                    .pNext = nullptr,
+                    .srcAccessMask = VK_ACCESS_NONE,
+                    .dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT,
+                    .oldLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+                    .newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                    .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+                    .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+                    .image = m_Swapchain->GetImage(frame->imageIndex),
+                    .subresourceRange = {
+                        .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+                        .baseMipLevel = 0,
+                        .levelCount = 1,
+                        .baseArrayLayer = 0,
+                        .layerCount = 1
+                    }
+                };
+
+                vkCmdPipelineBarrier(frame->graphicsBuffer,
+                    VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
+                    VK_PIPELINE_STAGE_TRANSFER_BIT,
+                    0,
+                    0, nullptr,
+                    0, nullptr,
+                    1, &swapchainImageBarrier
+                );
+
+                VkImageCopy copyRegion {
+                    .srcSubresource = {
+                        .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+                        .mipLevel = 0,
+                        .baseArrayLayer = 0,
+                        .layerCount = 1
+                    },
+                    .srcOffset = { 0, 0, 0 },
+                    .dstSubresource = {
+                        .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+                        .mipLevel = 0,
+                        .baseArrayLayer = 0,
+                        .layerCount = 1
+                    },
+                    .dstOffset = { 0, 0, 0 },
+                    .extent = { m_Width, m_Height, 1 }
+                };
+
+                vkCmdCopyImage(frame->graphicsBuffer,
+                    m_StorageImage->GetImage(), VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                    m_Swapchain->GetImage(frame->imageIndex), VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                    1, &copyRegion
+                );
+
+                swapchainImageBarrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+                swapchainImageBarrier.dstAccessMask = VK_ACCESS_NONE;
+                swapchainImageBarrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+                swapchainImageBarrier.newLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+
+                vkCmdPipelineBarrier(frame->graphicsBuffer,
+                    VK_PIPELINE_STAGE_TRANSFER_BIT,
+                    VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+                    0,
+                    0, nullptr,
+                    0, nullptr,
+                    1, &swapchainImageBarrier
+                );
+
+                VK_CHECK(vkEndCommandBuffer(frame->graphicsBuffer));
+            }
+
+            m_CommandManager->EndFrame();
+        }
     }
 
     void Renderer::HandleResize(const ResizeRequest& request)
@@ -296,7 +388,29 @@ namespace PathTracer {
         m_Width = request.width;
         m_Height = request.height;
 
-        m_Swapchain->Recreate(request.width, request.height);
+        m_CommandManager->WaitIdle();
+
+        m_Swapchain->Recreate(m_Width, m_Height);
+
+        m_StorageImage = std::make_shared<VulkanImage>(m_Device, VulkanImage::Spec {
+            .width = m_Width,
+            .height = m_Height,
+            .format = VK_FORMAT_R8G8B8A8_UNORM,
+            .usage = VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT,
+            .memoryUsage = VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE
+        });
+
+        m_StagingBuffer = std::make_shared<VulkanBuffer>(m_Device, VulkanBuffer::Spec {
+            .size = m_Width * m_Height * 4,
+            .usage = VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+            .memoryUsage = VMA_MEMORY_USAGE_AUTO_PREFER_HOST
+        });
+
+        m_DescriptorPool->Reset();
+        m_DescriptorSet = VulkanDescriptorWriter(m_Device, m_DescriptorSetLayout, m_DescriptorPool)
+            .WriteAccelerationStructure(0, m_TLAS)
+            .WriteImage(1, m_StorageImage, VK_IMAGE_LAYOUT_GENERAL, VK_NULL_HANDLE)
+            .Build().value();
     }
 
 }

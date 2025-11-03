@@ -44,7 +44,7 @@ namespace PathTracer {
         m_DeviceAddress = vkGetAccelerationStructureDeviceAddressKHR(m_Device->GetDevice(), &addressInfo);
     }
 
-    VulkanBLAS::VulkanBLAS(std::shared_ptr<VulkanDevice> device, const std::shared_ptr<VulkanCommand>& command, const std::vector<BLASGeometry>& geometries)
+    VulkanBLAS::VulkanBLAS(std::shared_ptr<VulkanDevice> device, const std::shared_ptr<VulkanCommandManager>& command, const std::vector<BLASGeometry>& geometries)
         : VulkanAccelerationStructure(device)
     {
         std::vector<VkAccelerationStructureGeometryKHR> vkGeometries;
@@ -142,7 +142,7 @@ namespace PathTracer {
 
         VK_CHECK(vkCreateAccelerationStructureKHR(m_Device->GetDevice(), &createInfo, nullptr, &m_AS));
 
-        command->SubmitOnce([&](VkCommandBuffer cmd) {
+        command->SubmitOnce(QueueType::Compute, [&](VkCommandBuffer cmd) {
             buildInfo.dstAccelerationStructure = m_AS;
             buildInfo.scratchData.deviceAddress = scratchBuffer->GetDeviceAddress();
 
@@ -160,7 +160,7 @@ namespace PathTracer {
         m_DeviceAddress = vkGetAccelerationStructureDeviceAddressKHR(m_Device->GetDevice(), &addressInfo);
     }
 
-    VulkanTLAS::VulkanTLAS(std::shared_ptr<VulkanDevice> device, const std::shared_ptr<VulkanCommand>& command, const std::vector<TLASInstance>& instances)
+    VulkanTLAS::VulkanTLAS(std::shared_ptr<VulkanDevice> device, const std::shared_ptr<VulkanCommandManager>& command, const std::vector<TLASInstance>& instances)
         : VulkanAccelerationStructure(device)
     {
         std::vector<VkAccelerationStructureInstanceKHR> vkInstances;
@@ -251,7 +251,7 @@ namespace PathTracer {
 
         VK_CHECK(vkCreateAccelerationStructureKHR(m_Device->GetDevice(), &createInfo, nullptr, &m_AS));
 
-        command->SubmitOnce([&](VkCommandBuffer cmd) {
+        command->SubmitOnce(QueueType::Compute, [&](VkCommandBuffer cmd) {
             buildInfo.dstAccelerationStructure = m_AS;
             buildInfo.scratchData.deviceAddress = scratchBuffer->GetDeviceAddress();
 
