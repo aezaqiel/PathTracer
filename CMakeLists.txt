@@ -31,6 +31,7 @@ add_subdirectory(thirdparty/vma)
 add_executable(${PROJECT_NAME}
     src/Main.cpp
     src/Types.hpp
+
     src/RHI/VulkanTypes.hpp
     src/RHI/VulkanContext.hpp
     src/RHI/VulkanContext.cpp
@@ -58,6 +59,8 @@ add_executable(${PROJECT_NAME}
     src/RHI/VulkanPipeline.cpp
     src/RHI/VulkanShaderBindingTable.hpp
     src/RHI/VulkanShaderBindingTable.cpp
+
+    src/Platform/VMA/VMAImpl.cpp
 )
 
 target_include_directories(${PROJECT_NAME}
@@ -85,17 +88,17 @@ PRIVATE
     src/pch.hpp
 )
 
-if(MSVC)
-    target_compile_options(${PROJECT_NAME} PRIVATE /W4 /WX)
-else()
-    target_compile_options(${PROJECT_NAME}
-    PRIVATE
-        "-Wall"
-        "-Wextra"
-        "-Wpedantic"
-        "-Werror"
-    )
-endif()
+# if(MSVC)
+#     target_compile_options(${PROJECT_NAME} PRIVATE /W4 /WX)
+# else()
+#     target_compile_options(${PROJECT_NAME}
+#     PRIVATE
+#         "-Wall"
+#         "-Wextra"
+#         "-Wpedantic"
+#         "-Werror"
+#     )
+# endif()
 
 function(compile_shaders_target target_name)
     file(GLOB_RECURSE SHADER_SOURCES

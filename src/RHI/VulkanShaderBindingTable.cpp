@@ -117,7 +117,7 @@ namespace PathTracer {
         m_Buffer = std::make_shared<VulkanBuffer>(m_Device, VulkanBuffer::Spec {
             .size = sbtSize,
             .usage = VK_BUFFER_USAGE_SHADER_BINDING_TABLE_BIT_KHR | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
-            .memoryProperties = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT
+            .memoryUsage = VMA_MEMORY_USAGE_AUTO_PREFER_HOST
         });
 
         u8* sbtData = reinterpret_cast<u8*>(m_Buffer->Map());

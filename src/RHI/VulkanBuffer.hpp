@@ -11,7 +11,7 @@ namespace PathTracer {
         {
             VkDeviceSize size;
             VkBufferUsageFlags usage;
-            VkMemoryPropertyFlags memoryProperties;
+            VmaMemoryUsage memoryUsage;
         };
 
     public:
@@ -23,7 +23,6 @@ namespace PathTracer {
         void Write(void* data, VkDeviceSize size, VkDeviceSize offset = 0);
 
         inline VkBuffer GetBuffer() const { return m_Buffer; }
-        inline VkDeviceMemory GetMemory() const { return m_Memory; }
         inline VkDeviceSize GetSize() const { return m_Size; }
         inline VkDeviceAddress GetDeviceAddress() const { return m_DeviceAddress; }
 
@@ -31,7 +30,8 @@ namespace PathTracer {
         std::shared_ptr<VulkanDevice> m_Device;
 
         VkBuffer m_Buffer { VK_NULL_HANDLE };
-        VkDeviceMemory m_Memory { VK_NULL_HANDLE };
+        VmaAllocation m_Allocation { VK_NULL_HANDLE };
+
         VkDeviceSize m_Size { 0 };
         VkDeviceAddress m_DeviceAddress { 0 };
 

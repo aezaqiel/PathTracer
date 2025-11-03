@@ -130,11 +130,31 @@ namespace PathTracer {
         VK_CHECK(vkCreateDevice(m_PhysicalDevice, &createInfo, nullptr, &m_Device));
         volkLoadDevice(m_Device);
 
+        VmaAllocatorCreateInfo allocatorInfo {
+            .flags = VMA_ALLOCATOR_CREATE_BUFFER_DEVICE_ADDRESS_BIT,
+            .physicalDevice = m_PhysicalDevice,
+            .device = m_Device,
+            .preferredLargeHeapBlockSize = 0,
+            .pAllocationCallbacks = nullptr,
+            .pDeviceMemoryCallbacks = nullptr,
+            .pHeapSizeLimit = nullptr,
+            .pVulkanFunctions = nullptr,
+            .instance = m_Context->GetInstance(),
+            .vulkanApiVersion = volkGetInstanceVersion()
+        };
+
+        VmaVulkanFunctions vmaFuncs;
+        vmaImportVulkanFunctionsFromVolk(&allocatorInfo, &vmaFuncs);
+        allocatorInfo.pVulkanFunctions = &vmaFuncs;
+
+        VK_CHECK(vmaCreateAllocator(&allocatorInfo, &m_Allocator));
+
         vkGetDeviceQueue(m_Device, m_QueueFamilyIndex, 0, &m_QueueFamily);
     }
 
     VulkanDevice::~VulkanDevice()
     {
+        vmaDestroyAllocator(m_Allocator);
         vkDestroyDevice(m_Device, nullptr);
     }
 

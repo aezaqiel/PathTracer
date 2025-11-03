@@ -16,31 +16,15 @@ namespace PathTracer {
             .pQueueFamilyIndices = nullptr
         };
 
-        VK_CHECK(vkCreateBuffer(m_Device->GetDevice(), &bufferInfo, nullptr, &m_Buffer));
+        VmaAllocationCreateInfo allocInfo;
+        memset(&allocInfo, 0, sizeof(VmaAllocationCreateInfo));
+        allocInfo.usage = spec.memoryUsage;
 
-        VkMemoryRequirements memoryRequirements;
-        vkGetBufferMemoryRequirements(m_Device->GetDevice(), m_Buffer, &memoryRequirements);
-
-        VkMemoryAllocateFlagsInfo allocateFlags {
-            .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_FLAGS_INFO,
-            .pNext = nullptr,
-            .flags = 0,
-            .deviceMask = 0
-        };
-
-        VkMemoryAllocateInfo allocateInfo {
-            .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
-            .pNext = &allocateFlags,
-            .allocationSize = memoryRequirements.size,
-            .memoryTypeIndex = FindMemoryType(m_Device->GetPhysicalDevice(), memoryRequirements.memoryTypeBits, spec.memoryProperties)
-        };
-
-        if (spec.usage & VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT) {
-            allocateFlags.flags = VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT;
+        if (spec.memoryUsage == VMA_MEMORY_USAGE_AUTO_PREFER_HOST || spec.memoryUsage == VMA_MEMORY_USAGE_CPU_TO_GPU || spec.memoryUsage == VMA_MEMORY_USAGE_GPU_TO_CPU) {
+            allocInfo.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT;
         }
 
-        VK_CHECK(vkAllocateMemory(m_Device->GetDevice(), &allocateInfo, nullptr, &m_Memory));
-        VK_CHECK(vkBindBufferMemory(m_Device->GetDevice(), m_Buffer, m_Memory, 0));
+        VK_CHECK(vmaCreateBuffer(m_Device->GetAllocator(), &bufferInfo, &allocInfo, &m_Buffer, &m_Allocation, nullptr));
 
         if (spec.usage & VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT) {
             VkBufferDeviceAddressInfo addressInfo {
@@ -56,9 +40,7 @@ namespace PathTracer {
     VulkanBuffer::~VulkanBuffer()
     {
         if (m_MappedData) Unmap();
-
-        vkDestroyBuffer(m_Device->GetDevice(), m_Buffer, nullptr);
-        vkFreeMemory(m_Device->GetDevice(), m_Memory, nullptr);
+        vmaDestroyBuffer(m_Device->GetAllocator(), m_Buffer, m_Allocation);
     }
 
     void VulkanBuffer::Write(void* data, VkDeviceSize size, VkDeviceSize offset)
@@ -75,15 +57,15 @@ namespace PathTracer {
             Unmap();
         }
 
-        VK_CHECK(vkMapMemory(m_Device->GetDevice(), m_Memory, offset, size, 0, &m_MappedData));
+        VK_CHECK(vmaMapMemory(m_Device->GetAllocator(), m_Allocation, &m_MappedData));
 
-        return m_MappedData;
+        return reinterpret_cast<void*>(reinterpret_cast<u8*>(m_MappedData) + offset);
     }
 
     void VulkanBuffer::Unmap()
     {
         if (m_MappedData != nullptr) {
-            vkUnmapMemory(m_Device->GetDevice(), m_Memory);
+            vmaUnmapMemory(m_Device->GetAllocator(), m_Allocation);
             m_MappedData = nullptr;
         } else {
             std::println("No memory mapped to buffer");

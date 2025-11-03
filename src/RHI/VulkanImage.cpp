@@ -30,20 +30,11 @@ namespace PathTracer {
             .initialLayout = m_Layout
         };
 
-        VK_CHECK(vkCreateImage(m_Device->GetDevice(), &imageInfo, nullptr, &m_Image));
+        VmaAllocationCreateInfo allocInfo;
+        memset(&allocInfo, 0, sizeof(VmaAllocationCreateInfo));
+        allocInfo.usage = spec.memoryUsage;
 
-        VkMemoryRequirements memoryRequirements;
-        vkGetImageMemoryRequirements(m_Device->GetDevice(), m_Image, &memoryRequirements);
-
-        VkMemoryAllocateInfo allocateInfo {
-            .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
-            .pNext = nullptr,
-            .allocationSize = memoryRequirements.size,
-            .memoryTypeIndex = FindMemoryType(m_Device->GetPhysicalDevice(), memoryRequirements.memoryTypeBits, spec.memoryProperties)
-        };
-
-        VK_CHECK(vkAllocateMemory(m_Device->GetDevice(), &allocateInfo, nullptr, &m_Memory));
-        VK_CHECK(vkBindImageMemory(m_Device->GetDevice(), m_Image, m_Memory, 0));
+        VK_CHECK(vmaCreateImage(m_Device->GetAllocator(), &imageInfo, &allocInfo, &m_Image, &m_Allocation, nullptr));
 
         VkImageViewCreateInfo viewInfo {
             .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
@@ -73,8 +64,7 @@ namespace PathTracer {
     VulkanImage::~VulkanImage()
     {
         vkDestroyImageView(m_Device->GetDevice(), m_View, nullptr);
-        vkDestroyImage(m_Device->GetDevice(), m_Image, nullptr);
-        vkFreeMemory(m_Device->GetDevice(), m_Memory, nullptr);
+        vmaDestroyImage(m_Device->GetAllocator(), m_Image, m_Allocation);
     }
 
 }

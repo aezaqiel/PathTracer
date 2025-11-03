@@ -13,7 +13,7 @@ namespace PathTracer {
             u32 height;
             VkFormat format;
             VkImageUsageFlags usage;
-            VkMemoryPropertyFlags memoryProperties;
+            VmaMemoryUsage memoryUsage;
         };
 
     public:
@@ -22,7 +22,6 @@ namespace PathTracer {
 
         inline VkImage GetImage() const { return m_Image; }
         inline VkImageView GetView() const { return m_View; }
-        inline VkDeviceMemory GetMemory() const { return m_Memory; }
 
         inline VkExtent2D GetExtent() const { return m_Extent; }
         inline u32 GetWidth() const { return m_Extent.width; }
@@ -35,8 +34,9 @@ namespace PathTracer {
         std::shared_ptr<VulkanDevice> m_Device;
 
         VkImage m_Image { VK_NULL_HANDLE };
+        VmaAllocation m_Allocation { VK_NULL_HANDLE };
+
         VkImageView m_View { VK_NULL_HANDLE };
-        VkDeviceMemory m_Memory { VK_NULL_HANDLE };
 
         VkExtent2D m_Extent;
         VkFormat m_Format;

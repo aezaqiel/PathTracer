@@ -3,6 +3,8 @@
 #include "Types.hpp"
 #include "VulkanContext.hpp"
 
+#include <vk_mem_alloc.h>
+
 namespace PathTracer {
 
     class VulkanDevice
@@ -18,6 +20,8 @@ namespace PathTracer {
         inline u32 GetQueueFamilyIndex() const { return m_QueueFamilyIndex; }
         inline VkQueue GetQueueFamily() const { return m_QueueFamily; }
 
+        inline VmaAllocator GetAllocator() const { return m_Allocator; }
+
     private:
         std::shared_ptr<VulkanContext> m_Context;
 
@@ -28,6 +32,8 @@ namespace PathTracer {
 
         u32 m_QueueFamilyIndex { 0 };
         VkQueue m_QueueFamily { VK_NULL_HANDLE };
+
+        VmaAllocator m_Allocator { VK_NULL_HANDLE };
     };
 
 }

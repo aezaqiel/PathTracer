@@ -1,20 +1,6 @@
-#if defined(__clang__)
-    #pragma clang diagnostic push
-    #pragma clang diagnostic ignored "-Wmissing-field-initializers"
-#elif defined(_MSC_VER)
-    #pragma warning(push)
-    #pragma warning(disable: 4100)
-#endif
-
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #include <stb_image_write.h>
 #include <glm/glm.hpp>
-
-#if defined(__clang__)
-    #pragma clang diagnostic pop
-#elif defined(_MSC_VER)
-    #pragma warning(pop)
-#endif
 
 #include "Types.hpp"
 #include "RHI/VulkanContext.hpp"
@@ -61,26 +47,26 @@ int main()
         .height = HEIGHT,
         .format = VK_FORMAT_R8G8B8A8_UNORM,
         .usage = VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT,
-        .memoryProperties = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
+        .memoryUsage = VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE
     });
 
     auto stagingBuffer = std::make_shared<VulkanBuffer>(device, VulkanBuffer::Spec {
         .size = WIDTH * HEIGHT * 4,
         .usage = VK_BUFFER_USAGE_TRANSFER_DST_BIT,
-        .memoryProperties = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT
+        .memoryUsage = VMA_MEMORY_USAGE_AUTO_PREFER_HOST
     });
 
     auto vertexBuffer = std::make_shared<VulkanBuffer>(device, VulkanBuffer::Spec {
         .size = sizeof(Vertex) * vertices.size(),
         .usage = VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT ,
-        .memoryProperties = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT
+        .memoryUsage = VMA_MEMORY_USAGE_AUTO_PREFER_HOST
     });
     vertexBuffer->Write(vertices.data(), sizeof(Vertex) * vertices.size());
 
     auto indexBuffer = std::make_shared<VulkanBuffer>(device, VulkanBuffer::Spec {
         .size = sizeof(u32) * indices.size(),
         .usage = VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT_EXT,
-        .memoryProperties = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT
+        .memoryUsage = VMA_MEMORY_USAGE_AUTO_PREFER_HOST
     });
     indexBuffer->Write(indices.data(), sizeof(u32) * indices.size());
 

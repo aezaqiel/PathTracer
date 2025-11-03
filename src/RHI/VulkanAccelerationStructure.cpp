@@ -120,13 +120,13 @@ namespace PathTracer {
         m_Buffer = std::make_shared<VulkanBuffer>(m_Device, VulkanBuffer::Spec {
             .size = sizeInfo.accelerationStructureSize,
             .usage = VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_STORAGE_BIT_KHR | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
-            .memoryProperties = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
+            .memoryUsage = VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE
         });
 
         auto scratchBuffer = std::make_shared<VulkanBuffer>(m_Device, VulkanBuffer::Spec {
             .size = sizeInfo.buildScratchSize,
             .usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
-            .memoryProperties = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
+            .memoryUsage = VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE
         });
 
         VkAccelerationStructureCreateInfoKHR createInfo {
@@ -180,7 +180,7 @@ namespace PathTracer {
         auto instanceBuffer = std::make_shared<VulkanBuffer>(m_Device, VulkanBuffer::Spec {
             .size = sizeof(VkAccelerationStructureInstanceKHR) * instances.size(),
             .usage = VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
-            .memoryProperties = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT
+            .memoryUsage = VMA_MEMORY_USAGE_AUTO_PREFER_HOST
         });
         instanceBuffer->Write(vkInstances.data(), sizeof(VkAccelerationStructureInstanceKHR) * instances.size());
 
@@ -229,13 +229,13 @@ namespace PathTracer {
         m_Buffer = std::make_shared<VulkanBuffer>(m_Device, VulkanBuffer::Spec {
             .size = sizeInfo.accelerationStructureSize,
             .usage = VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_STORAGE_BIT_KHR | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
-            .memoryProperties = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
+            .memoryUsage = VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE
         });
 
         auto scratchBuffer = std::make_shared<VulkanBuffer>(m_Device, VulkanBuffer::Spec {
             .size = sizeInfo.buildScratchSize,
             .usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
-            .memoryProperties = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
+            .memoryUsage = VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE
         });
 
         VkAccelerationStructureCreateInfoKHR createInfo {
