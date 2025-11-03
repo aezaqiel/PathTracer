@@ -1,6 +1,6 @@
 #pragma once
 
-#include "Types.hpp"
+#include "Core/Types.hpp"
 #include "VulkanContext.hpp"
 
 #include <vk_mem_alloc.h>
