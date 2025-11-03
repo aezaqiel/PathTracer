@@ -42,6 +42,8 @@ add_executable(${PROJECT_NAME}
     src/Core/Events.hpp
     src/Core/Window.hpp
     src/Core/Window.cpp
+    src/Core/Input.hpp
+    src/Core/Input.cpp
 
     src/Renderer/Renderer.hpp
     src/Renderer/Renderer.cpp
