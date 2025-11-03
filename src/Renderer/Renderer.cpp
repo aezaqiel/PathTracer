@@ -140,6 +140,29 @@ namespace PathTracer {
         if (m_RenderThread.joinable())
             m_RenderThread.join();
 
+        m_CommandManager->SubmitOnce(QueueType::Transfer, [&](VkCommandBuffer cmd) {
+            VkBufferImageCopy region {
+                .bufferOffset = 0,
+                .bufferRowLength = 0,
+                .bufferImageHeight = 0,
+                .imageSubresource = {
+                    .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+                    .mipLevel = 0,
+                    .baseArrayLayer = 0,
+                    .layerCount = 1
+                },
+                .imageOffset = { 0, 0, 0 },
+                .imageExtent = { m_Width, m_Height, 1 }
+            };
+
+            vkCmdCopyImageToBuffer(cmd,
+                m_StorageImage->GetImage(),
+                VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                m_StagingBuffer->GetBuffer(),
+                1, &region
+            );
+        });
+
         if (stbi_write_png("output.png", m_Width, m_Height, 4, m_StagingBuffer->Map(), m_Width * 4)) {
             LOG_INFO("Render saved to output.png");
         } else {
@@ -278,27 +301,6 @@ namespace PathTracer {
                     0, nullptr,
                     0, nullptr,
                     1, &imageBarrier
-                );
-
-                VkBufferImageCopy region {
-                    .bufferOffset = 0,
-                    .bufferRowLength = 0,
-                    .bufferImageHeight = 0,
-                    .imageSubresource = {
-                        .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
-                        .mipLevel = 0,
-                        .baseArrayLayer = 0,
-                        .layerCount = 1
-                    },
-                    .imageOffset = { 0, 0, 0 },
-                    .imageExtent = { m_Width, m_Height, 1 }
-                };
-
-                vkCmdCopyImageToBuffer(frame->computeBuffer,
-                    m_StorageImage->GetImage(),
-                    VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-                    m_StagingBuffer->GetBuffer(),
-                    1, &region
                 );
 
                 VK_CHECK(vkEndCommandBuffer(frame->computeBuffer));
