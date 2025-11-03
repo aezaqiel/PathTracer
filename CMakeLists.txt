@@ -40,6 +40,8 @@ add_executable(${PROJECT_NAME}
     src/Core/Logger.cpp
     src/Core/KeyCodes.hpp
     src/Core/Events.hpp
+    src/Core/Window.hpp
+    src/Core/Window.cpp
 
     src/RHI/VulkanTypes.hpp
     src/RHI/VulkanContext.hpp

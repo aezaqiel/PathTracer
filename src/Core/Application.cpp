@@ -19,6 +19,9 @@ namespace PathTracer {
     {
         m_EventQueue = std::make_unique<EventQueue>();
 
+        m_Window = std::make_shared<Window>(Window::Config(1280, 720, "PathTracer"));
+        m_Window->BindEventQueue(m_EventQueue.get());
+
         m_Context = std::make_shared<VulkanContext>();
         m_Device = std::make_shared<VulkanDevice>(m_Context);
         m_Command = std::make_shared<VulkanCommand>(m_Device);
@@ -213,12 +216,30 @@ namespace PathTracer {
         }
 
         m_StagingBuffer->Unmap();
+
+        while (m_Running) {
+            Window::PollEvents();
+            ProcessEvents();
+
+            if (!m_Minimized) {
+            }
+        }
     }
 
     void Application::ProcessEvents()
     {
         for (auto& event : m_EventQueue->Poll()) {
-            EventDispatcher dispathcer(event);
+            EventDispatcher dispatcher(event);
+
+            dispatcher.Dispatch<WindowClosedEvent>([&](const WindowClosedEvent&) {
+                m_Running = false;
+                return true;
+            });
+
+            dispatcher.Dispatch<WindowMinimizeEvent>([&](const WindowMinimizeEvent& e) {
+                m_Minimized = e.minimized;
+                return false;
+            });
         }
     }
 

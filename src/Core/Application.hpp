@@ -13,6 +13,7 @@
 #include "RHI/VulkanShaderBindingTable.hpp"
 
 #include "Events.hpp"
+#include "Window.hpp"
 
 namespace PathTracer {
 
@@ -28,7 +29,11 @@ namespace PathTracer {
         void ProcessEvents();
     
     private:
+        bool m_Running { true };
+        bool m_Minimized { true };
+
         std::unique_ptr<EventQueue> m_EventQueue;
+        std::shared_ptr<Window> m_Window;
 
         std::shared_ptr<VulkanContext> m_Context;
         std::shared_ptr<VulkanDevice> m_Device;
