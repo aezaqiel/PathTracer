@@ -21,8 +21,6 @@ namespace PathTracer {
             0.1f, 100.0f
         );
 
-        m_Model = std::make_unique<Model>("Sponza/NewSponza_Main_glTF_003.gltf");
-
         m_Renderer = std::make_unique<Renderer>(m_Window);
     }
 

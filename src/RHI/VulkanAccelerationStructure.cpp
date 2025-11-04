@@ -30,20 +30,6 @@ namespace PathTracer {
         }
     }
 
-    void VulkanAccelerationStructure::Finalize(VkAccelerationStructureKHR handle, std::shared_ptr<VulkanBuffer> buffer)
-    {
-        m_AS = handle;
-        m_Buffer = buffer;
-
-        VkAccelerationStructureDeviceAddressInfoKHR addressInfo {
-            .sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_DEVICE_ADDRESS_INFO_KHR,
-            .pNext = nullptr,
-            .accelerationStructure = m_AS
-        };
-
-        m_DeviceAddress = vkGetAccelerationStructureDeviceAddressKHR(m_Device->GetDevice(), &addressInfo);
-    }
-
     VulkanBLAS::VulkanBLAS(std::shared_ptr<VulkanDevice> device, const std::shared_ptr<VulkanCommandManager>& command, const std::vector<BLASGeometry>& geometries)
         : VulkanAccelerationStructure(device)
     {

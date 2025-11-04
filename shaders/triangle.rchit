@@ -3,7 +3,17 @@
 
 layout(location = 0) rayPayloadInEXT vec3 payload;
 
+struct Material {
+    vec3 color;
+    float padding;
+};
+
+layout(binding = 3, set = 0) buffer Materials {
+    Material materials[];
+} u_Materials;
+
 void main()
 {
-    payload = vec3(1.0, 0.0, 0.0); // Red triangle
+    Material mat = u_Materials.materials[gl_InstanceCustomIndexEXT];
+    payload = mat.color;
 }

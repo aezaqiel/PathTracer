@@ -20,8 +20,6 @@ namespace PathTracer {
     protected:
         VulkanAccelerationStructure(std::shared_ptr<VulkanDevice> device);
 
-        void Finalize(VkAccelerationStructureKHR handle, std::shared_ptr<VulkanBuffer> buffer);
-
     protected:
         std::shared_ptr<VulkanDevice> m_Device;
 

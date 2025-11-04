@@ -3,6 +3,7 @@
 #include "Core/Window.hpp"
 
 #include "Scene/Camera.hpp"
+#include "Scene/Model.hpp"
 
 #include "RHI/VulkanContext.hpp"
 #include "RHI/VulkanDevice.hpp"
@@ -74,13 +75,15 @@ namespace PathTracer {
 
         std::shared_ptr<VulkanBuffer> m_CameraBuffer;
 
+        std::unique_ptr<Model> m_Model;
+        std::vector<std::shared_ptr<VulkanBuffer>> m_VertexBuffer;
+        std::vector<std::shared_ptr<VulkanBuffer>> m_IndexBuffer;
+        std::shared_ptr<VulkanBuffer> m_MaterialBuffer;
+
         std::shared_ptr<VulkanImage> m_StorageImage;
         std::shared_ptr<VulkanBuffer> m_StagingBuffer;
-
-        std::shared_ptr<VulkanBuffer> m_VertexBuffer;
-        std::shared_ptr<VulkanBuffer> m_IndexBuffer;
-
-        std::shared_ptr<VulkanBLAS> m_BLAS;
+        
+        std::vector<std::shared_ptr<VulkanBLAS>> m_BLASes;
         std::shared_ptr<VulkanTLAS> m_TLAS;
 
         std::shared_ptr<VulkanDescriptorPool> m_DescriptorPool;

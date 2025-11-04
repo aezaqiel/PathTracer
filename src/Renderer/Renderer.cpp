@@ -7,11 +7,6 @@
 
 namespace PathTracer {
 
-    struct Vertex
-    {
-        glm::vec3 pos;
-    };
-
     struct CameraUBO
     {
         glm::mat4 inverseView { 1.0f };
@@ -39,6 +34,59 @@ namespace PathTracer {
             .memoryUsage = VMA_MEMORY_USAGE_AUTO_PREFER_HOST
         });
 
+        m_Model = std::make_unique<Model>("Suzanne/Suzanne.gltf");
+
+        VkDeviceSize matBufferSize = sizeof(Material) * m_Model->GetMaterials().size();
+        m_MaterialBuffer = std::make_shared<VulkanBuffer>(m_Device, VulkanBuffer::Spec {
+            .size = matBufferSize,
+            .usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
+            .memoryUsage = VMA_MEMORY_USAGE_AUTO_PREFER_HOST
+        });
+        m_MaterialBuffer->Write((void*)m_Model->GetMaterials().data(), matBufferSize);
+
+        m_VertexBuffer.reserve(m_Model->GetMeshes().size());
+        m_IndexBuffer.reserve(m_Model->GetMeshes().size());
+
+        for (const auto& mesh : m_Model->GetMeshes()) {
+            VkDeviceSize vertexSize = sizeof(Vertex) * mesh.vertices.size();
+            auto vertexStaging = std::make_shared<VulkanBuffer>(m_Device, VulkanBuffer::Spec {
+                .size = vertexSize,
+                .usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+                .memoryUsage = VMA_MEMORY_USAGE_AUTO_PREFER_HOST
+            });
+
+            VkDeviceSize indexSize = sizeof(u32) * mesh.indices.size();
+            auto indexStaging = std::make_unique<VulkanBuffer>(m_Device, VulkanBuffer::Spec {
+                .size = indexSize,
+                .usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+                .memoryUsage = VMA_MEMORY_USAGE_AUTO_PREFER_HOST
+            });
+
+            auto& vb = m_VertexBuffer.emplace_back(std::make_shared<VulkanBuffer>(m_Device, VulkanBuffer::Spec {
+                .size = vertexSize,
+                .usage = VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
+                .memoryUsage = VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE
+            }));
+
+            auto& ib = m_IndexBuffer.emplace_back(std::make_shared<VulkanBuffer>(m_Device, VulkanBuffer::Spec {
+                .size = indexSize,
+                .usage = VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
+                .memoryUsage = VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE
+            }));
+
+            m_CommandManager->SubmitOnce(QueueType::Transfer, [&](VkCommandBuffer cmd) {
+                VkBufferCopy copy {
+                    .srcOffset = 0,
+                    .dstOffset = 0,
+                    .size = vertexSize
+                };
+                vkCmdCopyBuffer(cmd, vertexStaging->GetBuffer(), vb->GetBuffer(), 1, &copy);
+
+                copy.size = indexSize;
+                vkCmdCopyBuffer(cmd, indexStaging->GetBuffer(), ib->GetBuffer(), 1, &copy);
+            });
+        }
+
         m_StorageImage = std::make_shared<VulkanImage>(m_Device, VulkanImage::Spec {
             .width = m_Width,
             .height = m_Height,
@@ -53,52 +101,34 @@ namespace PathTracer {
             .memoryUsage = VMA_MEMORY_USAGE_AUTO_PREFER_HOST
         });
 
-        static const std::vector<Vertex> vertices {
-            {{  0.0f, -0.5f, 0.0f }},
-            {{  0.5f,  0.5f, 0.0f }},
-            {{ -0.5f,  0.5f, 0.0f }}
-        };
+        std::vector<VulkanTLAS::TLASInstance> tlasInstances;
 
-        static const std::vector<u32> indices { 0, 1, 2 };
+        for (usize i = 0; i < m_Model->GetMeshes().size(); ++i) {
+            const auto& mesh = m_Model->GetMeshes()[i];
 
-        m_VertexBuffer = std::make_shared<VulkanBuffer>(m_Device, VulkanBuffer::Spec {
-            .size = sizeof(Vertex) * vertices.size(),
-            .usage = VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT ,
-            .memoryUsage = VMA_MEMORY_USAGE_AUTO_PREFER_HOST
-        });
-        m_VertexBuffer->Write((void*)vertices.data(), sizeof(Vertex) * vertices.size());
+            std::vector<VulkanBLAS::BLASGeometry> blasGeom {
+                {
+                    .vertexBuffer = m_VertexBuffer.at(i),
+                    .indexBuffer = m_IndexBuffer.at(i),
+                    .vertexCount = static_cast<u32>(mesh.vertices.size()),
+                    .indexCount = static_cast<u32>(mesh.indices.size()),
+                    .vertexFormat = VK_FORMAT_R32G32B32_SFLOAT,
+                    .vertexStride = sizeof(Vertex),
+                    .isOpaque = true
+                }
+            };
 
-        m_IndexBuffer = std::make_shared<VulkanBuffer>(m_Device, VulkanBuffer::Spec {
-            .size = sizeof(u32) * indices.size(),
-            .usage = VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT_EXT,
-            .memoryUsage = VMA_MEMORY_USAGE_AUTO_PREFER_HOST
-        });
-        m_IndexBuffer->Write((void*)indices.data(), sizeof(u32) * indices.size());
+            auto& blas = m_BLASes.emplace_back(std::make_shared<VulkanBLAS>(m_Device, m_CommandManager, blasGeom));
 
-        std::vector<VulkanBLAS::BLASGeometry> blasGeometries {
-            {
-                .vertexBuffer = m_VertexBuffer,
-                .indexBuffer = m_IndexBuffer,
-                .vertexCount = static_cast<u32>(vertices.size()),
-                .indexCount = static_cast<u32>(indices.size()),
-                .vertexFormat = VK_FORMAT_R32G32B32_SFLOAT,
-                .vertexStride = sizeof(Vertex),
-                .isOpaque = true
-            }
-        };
-
-        m_BLAS = std::make_shared<VulkanBLAS>(m_Device, m_CommandManager, blasGeometries);
-
-        std::vector<VulkanTLAS::TLASInstance> tlasInstances {
-            {
-                .blas = m_BLAS,
+            tlasInstances.push_back(VulkanTLAS::TLASInstance {
+                .blas = blas,
                 .transform = glm::mat4(1.0f),
-                .instanceCustomIndex = 0,
+                .instanceCustomIndex = mesh.materialIndex,
                 .mask = 0xFF,
                 .sbtOffset = 0,
                 .flags = VK_GEOMETRY_INSTANCE_TRIANGLE_FACING_CULL_DISABLE_BIT_KHR
-            }
-        };
+            });
+        }
 
         m_TLAS = std::make_shared<VulkanTLAS>(m_Device, m_CommandManager, tlasInstances);
 
@@ -114,6 +144,10 @@ namespace PathTracer {
             {
                 .type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
                 .descriptorCount = 1
+            },
+            {
+                .type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+                .descriptorCount = 1
             }
         };
         
@@ -123,12 +157,14 @@ namespace PathTracer {
             .AddBinding(0, VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR, VK_SHADER_STAGE_RAYGEN_BIT_KHR)
             .AddBinding(1, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_MISS_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR)
             .AddBinding(2, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_RAYGEN_BIT_KHR)
+            .AddBinding(3, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR)
             .Build();
 
         m_DescriptorSet = VulkanDescriptorWriter(m_Device, m_DescriptorSetLayout, m_DescriptorPool)
             .WriteAccelerationStructure(0, m_TLAS)
             .WriteImage(1, m_StorageImage, VK_IMAGE_LAYOUT_GENERAL, VK_NULL_HANDLE)
             .WriteBuffer(2, m_CameraBuffer, 0)
+            .WriteBuffer(3, m_MaterialBuffer, 0)
             .Build().value();
 
         m_PipelineLayout = VulkanPipelineLayout::Builder(m_Device)
@@ -139,7 +175,7 @@ namespace PathTracer {
             .AddRayGenShaderGroup(std::make_shared<VulkanShader>(m_Device, VK_SHADER_STAGE_RAYGEN_BIT_KHR, "triangle.rgen.spv"))
             .AddMissShaderGroup(std::make_shared<VulkanShader>(m_Device, VK_SHADER_STAGE_MISS_BIT_KHR, "triangle.rmiss.spv"))
             .AddHitShaderGroup(std::make_shared<VulkanShader>(m_Device, VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR, "triangle.rchit.spv"))
-            .SetMaxDepth(8)
+            .SetMaxDepth(4)
             .Build();
 
         m_SBT = VulkanShaderBindingTable::Builder(m_Device, m_Pipeline)
@@ -442,6 +478,7 @@ namespace PathTracer {
             .WriteAccelerationStructure(0, m_TLAS)
             .WriteImage(1, m_StorageImage, VK_IMAGE_LAYOUT_GENERAL, VK_NULL_HANDLE)
             .WriteBuffer(2, m_CameraBuffer, 0)
+            .WriteBuffer(3, m_MaterialBuffer, 0)
             .Build().value();
     }
 

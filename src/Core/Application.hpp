@@ -7,7 +7,6 @@
 #include "Renderer/Renderer.hpp"
 
 #include "Scene/Camera.hpp"
-#include "Scene/Model.hpp"
 
 namespace PathTracer {
 
@@ -32,7 +31,6 @@ namespace PathTracer {
         std::shared_ptr<Window> m_Window;
 
         std::unique_ptr<Camera> m_Camera;
-        std::unique_ptr<Model> m_Model;
 
         std::unique_ptr<Renderer> m_Renderer;
     };
