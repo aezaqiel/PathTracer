@@ -50,56 +50,6 @@ namespace PathTracer {
             .memoryUsage = VMA_MEMORY_USAGE_AUTO_PREFER_HOST
         });
 
-        std::vector<VkDescriptorPoolSize> poolSizes {
-            {
-                .type = VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR,
-                .descriptorCount = 1,
-            },
-            {
-                .type = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
-                .descriptorCount = 1,
-            },
-            {
-                .type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
-                .descriptorCount = 1
-            },
-            {
-                .type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
-                .descriptorCount = 1
-            },
-            {
-                .type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-                .descriptorCount = s_MaxSceneTextures
-            }
-        };
-        
-        m_DescriptorPool = std::make_shared<VulkanDescriptorPool>(m_Device, 1, poolSizes);
-
-        m_DescriptorSetLayout = VulkanDescriptorSetLayout::Builder(m_Device)
-            .AddBinding(0, VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR, VK_SHADER_STAGE_RAYGEN_BIT_KHR)
-            .AddBinding(1, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_MISS_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR)
-            .AddBinding(2, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_RAYGEN_BIT_KHR)
-            .AddBinding(3, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR)
-            .AddBinding(4, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR, s_MaxSceneTextures)
-            .Build();
-
-        m_PipelineLayout = VulkanPipelineLayout::Builder(m_Device)
-            .AddSetLayout(m_DescriptorSetLayout)
-            .Build();
-
-        m_Pipeline = VulkanRayTracingPipeline::Builder(m_Device, m_PipelineLayout)
-            .AddRayGenShaderGroup(std::make_shared<VulkanShader>(m_Device, VK_SHADER_STAGE_RAYGEN_BIT_KHR, "triangle.rgen.spv"))
-            .AddMissShaderGroup(std::make_shared<VulkanShader>(m_Device, VK_SHADER_STAGE_MISS_BIT_KHR, "triangle.rmiss.spv"))
-            .AddHitShaderGroup(std::make_shared<VulkanShader>(m_Device, VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR, "triangle.rchit.spv"))
-            .SetMaxDepth(4)
-            .Build();
-
-        m_SBT = VulkanShaderBindingTable::Builder(m_Device, m_Pipeline)
-            .AddRayGenGroup()
-            .AddMissGroup()
-            .AddHitGroup()
-            .Build();
-
         m_RenderThread = std::thread(&Renderer::RenderLoop, this);
     }
 
@@ -272,13 +222,13 @@ namespace PathTracer {
 
             auto& vb = m_VertexBuffer.emplace_back(std::make_shared<VulkanBuffer>(m_Device, VulkanBuffer::Spec {
                 .size = vertexSize,
-                .usage = VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
+                .usage = VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
                 .memoryUsage = VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE
             }));
 
             auto& ib = m_IndexBuffer.emplace_back(std::make_shared<VulkanBuffer>(m_Device, VulkanBuffer::Spec {
                 .size = indexSize,
-                .usage = VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
+                .usage = VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
                 .memoryUsage = VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE
             }));
 
@@ -326,7 +276,65 @@ namespace PathTracer {
 
         m_TLAS = std::make_shared<VulkanTLAS>(m_Device, m_CommandManager, tlasInstances);
 
-        m_DescriptorPool->Reset();
+        std::vector<VkDescriptorPoolSize> poolSizes {
+            {
+                .type = VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR,
+                .descriptorCount = 1,
+            },
+            {
+                .type = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
+                .descriptorCount = 1,
+            },
+            {
+                .type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+                .descriptorCount = 1
+            },
+            {
+                .type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+                .descriptorCount = 1
+            },
+            {
+                .type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+                .descriptorCount = s_MaxSceneTextures
+            },
+            {
+                .type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+                .descriptorCount = static_cast<u32>(m_VertexBuffer.size())
+            },
+            {
+                .type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+                .descriptorCount = static_cast<u32>(m_IndexBuffer.size())
+            }
+        };
+        
+        m_DescriptorPool = std::make_shared<VulkanDescriptorPool>(m_Device, 1, poolSizes);
+
+        m_DescriptorSetLayout = VulkanDescriptorSetLayout::Builder(m_Device)
+            .AddBinding(0, VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR, VK_SHADER_STAGE_RAYGEN_BIT_KHR)
+            .AddBinding(1, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_MISS_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR)
+            .AddBinding(2, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_RAYGEN_BIT_KHR)
+            .AddBinding(3, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR)
+            .AddBinding(4, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR, s_MaxSceneTextures)
+            .AddBinding(5, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR)
+            .AddBinding(6, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR)
+            .Build();
+
+        m_PipelineLayout = VulkanPipelineLayout::Builder(m_Device)
+            .AddSetLayout(m_DescriptorSetLayout)
+            .Build();
+
+        m_Pipeline = VulkanRayTracingPipeline::Builder(m_Device, m_PipelineLayout)
+            .AddRayGenShaderGroup(std::make_shared<VulkanShader>(m_Device, VK_SHADER_STAGE_RAYGEN_BIT_KHR, "triangle.rgen.spv"))
+            .AddMissShaderGroup(std::make_shared<VulkanShader>(m_Device, VK_SHADER_STAGE_MISS_BIT_KHR, "triangle.rmiss.spv"))
+            .AddHitShaderGroup(std::make_shared<VulkanShader>(m_Device, VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR, "triangle.rchit.spv"))
+            .SetMaxDepth(4)
+            .Build();
+
+        m_SBT = VulkanShaderBindingTable::Builder(m_Device, m_Pipeline)
+            .AddRayGenGroup()
+            .AddMissGroup()
+            .AddHitGroup()
+            .Build();
 
         m_DescriptorSet = VulkanDescriptorWriter(m_Device, m_DescriptorSetLayout, m_DescriptorPool)
             .WriteAccelerationStructure(0, m_TLAS)
@@ -334,6 +342,8 @@ namespace PathTracer {
             .WriteBuffer(2, m_CameraBuffer, 0)
             .WriteBuffer(3, m_MaterialBuffer, 0)
             .WriteImageArray(4, m_SceneTextures, m_SceneSamplers)
+            .WriteBufferArray(5, m_VertexBuffer)
+            .WriteBufferArray(6, m_IndexBuffer)
             .Build().value();
     }
 
@@ -588,6 +598,8 @@ namespace PathTracer {
             .WriteBuffer(2, m_CameraBuffer, 0)
             .WriteBuffer(3, m_MaterialBuffer, 0)
             .WriteImageArray(4, m_SceneTextures, m_SceneSamplers)
+            .WriteBufferArray(5, m_VertexBuffer)
+            .WriteBufferArray(6, m_IndexBuffer)
             .Build().value();
     }
 

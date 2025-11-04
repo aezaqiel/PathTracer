@@ -19,8 +19,8 @@ namespace PathTracer {
 
         m_Renderer = std::make_unique<Renderer>(m_Window);
 
-        auto model = m_AssetManager->GetModel("Suzanne/Suzanne.gltf");
-        m_Renderer->LoadScene(model);
+        m_Renderer->LoadScene(m_AssetManager->GetModel("Suzanne/Suzanne.gltf"));
+        // m_Renderer->LoadScene(m_AssetManager->GetModel("Sponza/NewSponza_Main_glTF_003.gltf"));
 
         m_Camera = std::make_unique<Camera>(
             45.0f,

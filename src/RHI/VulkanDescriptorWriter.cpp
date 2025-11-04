@@ -57,6 +57,39 @@ namespace PathTracer {
         return *this;
     }
 
+    VulkanDescriptorWriter& VulkanDescriptorWriter::WriteBufferArray(u32 binding, const std::vector<std::shared_ptr<VulkanBuffer>>& buffers)
+    {
+        if (buffers.empty()) return *this;
+
+        std::vector<VkDescriptorBufferInfo> bufferInfos;
+        bufferInfos.reserve(buffers.size());
+
+        for (const auto& buffer : buffers) {
+            bufferInfos.push_back(VkDescriptorBufferInfo {
+                .buffer = buffer->GetBuffer(),
+                .offset = 0,
+                .range = buffer->GetSize()
+            });
+        }
+
+        auto& bufferArrayInfo = m_BufferArrayInfos.emplace_back(std::move(bufferInfos));
+
+        m_Writes.push_back(VkWriteDescriptorSet {
+            .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+            .pNext = nullptr,
+            .dstSet = VK_NULL_HANDLE,
+            .dstBinding = binding,
+            .dstArrayElement = 0,
+            .descriptorCount = static_cast<u32>(bufferArrayInfo.size()),
+            .descriptorType = m_Layout->GetBinding(binding).descriptorType,
+            .pImageInfo = nullptr,
+            .pBufferInfo = bufferArrayInfo.data(),
+            .pTexelBufferView = nullptr
+        });
+
+        return *this;
+    }
+
     VulkanDescriptorWriter& VulkanDescriptorWriter::WriteImage(u32 binding, const std::shared_ptr<VulkanImage>& image, VkImageLayout layout, VkSampler sampler)
     {
         VkDescriptorImageInfo& imageInfo = m_ImageInfos.emplace_back(VkDescriptorImageInfo {

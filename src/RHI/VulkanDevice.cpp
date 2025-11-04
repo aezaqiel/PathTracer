@@ -73,23 +73,31 @@ namespace PathTracer {
             });
         }
 
+        VkPhysicalDeviceVulkan12Features vulkan12 {
+            .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES,
+            .pNext = nullptr,
+            .shaderSampledImageArrayNonUniformIndexing = VK_TRUE,
+            .runtimeDescriptorArray = VK_TRUE,
+            .bufferDeviceAddress = VK_TRUE
+        };
+
         VkPhysicalDeviceSwapchainMaintenance1FeaturesKHR swapchainMaintenance1 {
             .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SWAPCHAIN_MAINTENANCE_1_FEATURES_KHR,
-            .pNext = nullptr,
+            .pNext = &vulkan12,
             .swapchainMaintenance1 = VK_TRUE
         };
 
-        VkPhysicalDeviceBufferDeviceAddressFeatures bufferDeviceAddress {
-            .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_BUFFER_DEVICE_ADDRESS_FEATURES,
-            .pNext = &swapchainMaintenance1,
-            .bufferDeviceAddress = VK_TRUE,
-            .bufferDeviceAddressCaptureReplay = VK_FALSE,
-            .bufferDeviceAddressMultiDevice = VK_FALSE
-        };
+        // VkPhysicalDeviceBufferDeviceAddressFeatures bufferDeviceAddress {
+        //     .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_BUFFER_DEVICE_ADDRESS_FEATURES,
+        //     .pNext = &swapchainMaintenance1,
+        //     .bufferDeviceAddress = VK_TRUE,
+        //     .bufferDeviceAddressCaptureReplay = VK_FALSE,
+        //     .bufferDeviceAddressMultiDevice = VK_FALSE
+        // };
 
         VkPhysicalDeviceAccelerationStructureFeaturesKHR accelerationStructure {
             .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ACCELERATION_STRUCTURE_FEATURES_KHR,
-            .pNext = &bufferDeviceAddress,
+            .pNext = &swapchainMaintenance1,
             .accelerationStructure = VK_TRUE,
             .accelerationStructureCaptureReplay = VK_FALSE,
             .accelerationStructureIndirectBuild = VK_FALSE,
