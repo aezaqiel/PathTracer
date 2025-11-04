@@ -35,6 +35,7 @@ namespace PathTracer {
         });
 
         m_Model = std::make_unique<Model>("Suzanne/Suzanne.gltf");
+        // m_Model = std::make_unique<Model>("Sponza/NewSponza_Main_glTF_003.gltf");
 
         VkDeviceSize matBufferSize = sizeof(Material) * m_Model->GetMaterials().size();
         m_MaterialBuffer = std::make_shared<VulkanBuffer>(m_Device, VulkanBuffer::Spec {
@@ -54,6 +55,7 @@ namespace PathTracer {
                 .usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
                 .memoryUsage = VMA_MEMORY_USAGE_AUTO_PREFER_HOST
             });
+            vertexStaging->Write((void*)mesh.vertices.data(), vertexSize);
 
             VkDeviceSize indexSize = sizeof(u32) * mesh.indices.size();
             auto indexStaging = std::make_unique<VulkanBuffer>(m_Device, VulkanBuffer::Spec {
@@ -61,6 +63,7 @@ namespace PathTracer {
                 .usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
                 .memoryUsage = VMA_MEMORY_USAGE_AUTO_PREFER_HOST
             });
+            indexStaging->Write((void*)mesh.indices.data(), indexSize);
 
             auto& vb = m_VertexBuffer.emplace_back(std::make_shared<VulkanBuffer>(m_Device, VulkanBuffer::Spec {
                 .size = vertexSize,
