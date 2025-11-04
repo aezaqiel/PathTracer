@@ -17,6 +17,8 @@ namespace PathTracer {
 
         m_RtProps.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_PIPELINE_PROPERTIES_KHR;
         m_RtProps.pNext = nullptr;
+        m_Props.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2;
+        m_Props.pNext = &m_RtProps;
 
         u32 deviceCount = 0;
         vkEnumeratePhysicalDevices(m_Context->GetInstance(), &deviceCount, nullptr);
@@ -28,13 +30,9 @@ namespace PathTracer {
                 continue;
             }
 
-            VkPhysicalDeviceProperties2 props;
-            props.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2;
-            props.pNext = &m_RtProps;
+            vkGetPhysicalDeviceProperties2(device, &m_Props);
 
-            vkGetPhysicalDeviceProperties2(device, &props);
-
-            if (props.properties.deviceType != VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU) {
+            if (m_Props.properties.deviceType != VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU) {
                 continue;
             }
 
@@ -49,7 +47,7 @@ namespace PathTracer {
                 m_PhysicalDevice = device;
                 m_QueueIndices = indices;
 
-                LOG_INFO("Physical device: {}", props.properties.deviceName);
+                LOG_INFO("Physical device: {}", m_Props.properties.deviceName);
                 LOG_INFO("Graphics queue: {}", m_QueueIndices.graphics.value());
                 LOG_INFO("Present queue: {}", m_QueueIndices.present.value());
                 LOG_INFO("Compute queue: {}", m_QueueIndices.compute.value());

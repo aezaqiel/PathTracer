@@ -50,6 +50,9 @@ namespace PathTracer {
         void Draw(const RenderPacket& packet);
         void HandleResize(const ResizeRequest& request);
 
+        void CreateSamplers(u32 count);
+        void DestroySamplers();
+
     private:
         std::shared_ptr<Window> m_Window;
 

@@ -15,6 +15,7 @@ namespace PathTracer {
 
         inline VkPhysicalDevice GetPhysicalDevice() const { return m_PhysicalDevice; }
         inline VkPhysicalDeviceRayTracingPipelinePropertiesKHR GetRtProps() const { return m_RtProps; }
+        inline VkPhysicalDeviceProperties2 GetProps() const { return m_Props; }
         inline VkDevice GetDevice() const { return m_Device; }
 
         // TODO: Remove
@@ -65,6 +66,8 @@ namespace PathTracer {
 
         VkPhysicalDevice m_PhysicalDevice { VK_NULL_HANDLE };
         VkPhysicalDeviceRayTracingPipelinePropertiesKHR m_RtProps;
+        VkPhysicalDeviceProperties2 m_Props;
+
         QueueFamilyIndices m_QueueIndices;
 
         VkDevice m_Device { VK_NULL_HANDLE };

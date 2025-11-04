@@ -81,8 +81,38 @@ namespace PathTracer {
         return *this;
     }
 
-    VulkanDescriptorWriter& VulkanDescriptorWriter::WriteImageArray(u32 binding, const std::vector<std::shared_ptr<VulkanImage>>& images, const std::vector<VkSampler>& sampler)
+    VulkanDescriptorWriter& VulkanDescriptorWriter::WriteImageArray(u32 binding, const std::vector<std::shared_ptr<VulkanImage>>& images, const std::vector<VkSampler>& samplers)
     {
+        if (images.empty() || images.size() != samplers.size()) {
+            LOG_ERROR("Invalid WriteImageArray call, empty || images != samplers");
+            return *this;
+        }
+
+        std::vector<VkDescriptorImageInfo> imageInfos;
+        imageInfos.reserve(images.size());
+        for (usize i = 0; i < images.size(); ++i) {
+            imageInfos.push_back(VkDescriptorImageInfo {
+                .sampler = samplers[i],
+                .imageView = images[i]->GetView(),
+                .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
+            });
+        }
+
+        auto& imageArrayInfo = m_ImageArrayInfos.emplace_back(std::move(imageInfos));
+
+        m_Writes.push_back(VkWriteDescriptorSet {
+            .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+            .pNext = nullptr,
+            .dstSet = VK_NULL_HANDLE,
+            .dstBinding = binding,
+            .dstArrayElement = 0,
+            .descriptorCount = static_cast<u32>(imageArrayInfo.size()),
+            .descriptorType = m_Layout->GetBinding(binding).descriptorType,
+            .pImageInfo = imageArrayInfo.data(),
+            .pBufferInfo = nullptr,
+            .pTexelBufferView = nullptr
+        });
+
         return *this;
     }
 

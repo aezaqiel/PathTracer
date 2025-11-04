@@ -14,6 +14,8 @@ namespace PathTracer {
         glm::vec3 position { 0.0f };
     };
 
+    static constexpr u32 s_MaxSceneTextures = 256;
+
     Renderer::Renderer(std::shared_ptr<Window> window)
         : m_Window(window)
     {
@@ -67,7 +69,7 @@ namespace PathTracer {
             },
             {
                 .type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-                .descriptorCount = 1
+                .descriptorCount = s_MaxSceneTextures
             }
         };
         
@@ -78,7 +80,7 @@ namespace PathTracer {
             .AddBinding(1, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_MISS_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR)
             .AddBinding(2, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_RAYGEN_BIT_KHR)
             .AddBinding(3, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR)
-            .AddBinding(4, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR)
+            .AddBinding(4, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR, s_MaxSceneTextures)
             .Build();
 
         m_PipelineLayout = VulkanPipelineLayout::Builder(m_Device)
@@ -140,6 +142,8 @@ namespace PathTracer {
 
         m_StagingBuffer->Unmap();
 
+        DestroySamplers();
+
         m_CommandManager->WaitIdle();
     }
 
@@ -173,6 +177,33 @@ namespace PathTracer {
             });
 
             m_CommandManager->SubmitOnce(QueueType::Transfer, [tex, texture, staging](VkCommandBuffer cmd) {
+                VkImageMemoryBarrier barrier {
+                    .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
+                    .pNext = nullptr,
+                    .srcAccessMask = VK_ACCESS_NONE,
+                    .dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT,
+                    .oldLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+                    .newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                    .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+                    .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+                    .image = texture->GetImage(),
+                    .subresourceRange = {
+                        .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+                        .baseMipLevel = 0,
+                        .levelCount = 1,
+                        .baseArrayLayer = 0,
+                        .layerCount = 1
+                    }
+                };
+                vkCmdPipelineBarrier(cmd,
+                    VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
+                    VK_PIPELINE_STAGE_TRANSFER_BIT,
+                    0,
+                    0, nullptr,
+                    0, nullptr,
+                    1, &barrier
+                );
+
                 VkBufferImageCopy copy {
                     .bufferOffset = 0,
                     .bufferRowLength = 0,
@@ -190,9 +221,23 @@ namespace PathTracer {
                         .depth = 1
                     }
                 };
+                vkCmdCopyBufferToImage(cmd, staging->GetBuffer(), texture->GetImage(), VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &copy);
 
-                vkCmdCopyBufferToImage(cmd, staging->GetBuffer(), texture->GetImage(), VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL, 1, &copy);
+                barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+                barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+                barrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+                barrier.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+                vkCmdPipelineBarrier(cmd,
+                    VK_PIPELINE_STAGE_TRANSFER_BIT,
+                    VK_PIPELINE_STAGE_RAY_TRACING_SHADER_BIT_KHR,
+                    0,
+                    0, nullptr,
+                    0, nullptr,
+                    1, &barrier
+                );
             });
+
+            CreateSamplers(m_SceneTextures.size());
 
             m_SceneTextures.push_back(texture);
         }
@@ -288,6 +333,7 @@ namespace PathTracer {
             .WriteImage(1, m_StorageImage, VK_IMAGE_LAYOUT_GENERAL, VK_NULL_HANDLE)
             .WriteBuffer(2, m_CameraBuffer, 0)
             .WriteBuffer(3, m_MaterialBuffer, 0)
+            .WriteImageArray(4, m_SceneTextures, m_SceneSamplers)
             .Build().value();
     }
 
@@ -541,7 +587,53 @@ namespace PathTracer {
             .WriteImage(1, m_StorageImage, VK_IMAGE_LAYOUT_GENERAL, VK_NULL_HANDLE)
             .WriteBuffer(2, m_CameraBuffer, 0)
             .WriteBuffer(3, m_MaterialBuffer, 0)
+            .WriteImageArray(4, m_SceneTextures, m_SceneSamplers)
             .Build().value();
+    }
+
+    void Renderer::CreateSamplers(u32 count)
+    {
+        if (count == 0) return;
+
+        DestroySamplers();
+        m_SceneSamplers.resize(count);
+
+        VkPhysicalDeviceProperties props = m_Device->GetProps().properties;
+
+        VkSamplerCreateInfo samplerInfo {
+            .sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
+            .pNext = nullptr,
+            .flags = 0,
+            .magFilter = VK_FILTER_LINEAR,
+            .minFilter = VK_FILTER_LINEAR,
+            .mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR,
+            .addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT,
+            .addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT,
+            .addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT,
+            .mipLodBias = 0.0f,
+            .anisotropyEnable = VK_TRUE,
+            .maxAnisotropy = props.limits.maxSamplerAnisotropy,
+            .compareEnable = VK_FALSE,
+            .compareOp = VK_COMPARE_OP_ALWAYS,
+            .minLod = 0.0f,
+            .maxLod = VK_LOD_CLAMP_NONE,
+            .borderColor = VK_BORDER_COLOR_INT_OPAQUE_BLACK,
+            .unnormalizedCoordinates = VK_FALSE
+        };
+
+        for (u32 i = 0; i < count; ++i) {
+            VK_CHECK(vkCreateSampler(m_Device->GetDevice(), &samplerInfo, nullptr, &m_SceneSamplers[i]));
+        }
+    }
+
+    void Renderer::DestroySamplers()
+    {
+        for (auto& sampler : m_SceneSamplers) {
+            if (sampler != VK_NULL_HANDLE) {
+                vkDestroySampler(m_Device->GetDevice(), sampler, nullptr);
+            }
+        }
+        m_SceneSamplers.clear();
     }
 
 }

@@ -18,7 +18,7 @@ namespace PathTracer {
         VulkanDescriptorWriter& WriteAccelerationStructure(u32 binding, const std::shared_ptr<VulkanAccelerationStructure>& as);
         VulkanDescriptorWriter& WriteBuffer(u32 binding, const std::shared_ptr<VulkanBuffer>& buffer, VkDeviceSize offset);
         VulkanDescriptorWriter& WriteImage(u32 binding, const std::shared_ptr<VulkanImage>& image, VkImageLayout layout, VkSampler sampler);
-        VulkanDescriptorWriter& WriteImageArray(u32 binding, const std::vector<std::shared_ptr<VulkanImage>>& images, const std::vector<VkSampler>& sampler);
+        VulkanDescriptorWriter& WriteImageArray(u32 binding, const std::vector<std::shared_ptr<VulkanImage>>& images, const std::vector<VkSampler>& samplers);
 
         std::expected<VkDescriptorSet, VkResult> Build();
 
@@ -34,6 +34,7 @@ namespace PathTracer {
 
         std::deque<VkDescriptorBufferInfo> m_BufferInfos;
         std::deque<VkDescriptorImageInfo> m_ImageInfos;
+        std::deque<std::vector<VkDescriptorImageInfo>> m_ImageArrayInfos;
     };
 
 }

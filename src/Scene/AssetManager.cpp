@@ -25,7 +25,7 @@ namespace PathTracer {
             return m_ModelCache[filename];
         }
 
-        auto model = LoadModelFromFile(GetFullAssetPath(filename));
+        auto model = LoadModelFromFile(filename);
         m_ModelCache[filename] = model;
 
         return model;
@@ -36,10 +36,12 @@ namespace PathTracer {
         return std::make_shared<Texture>(filepath);
     }
 
-    std::shared_ptr<Model> AssetManager::LoadModelFromFile(const std::string& filepath)
+    std::shared_ptr<Model> AssetManager::LoadModelFromFile(const std::string& filename)
     {
         Timer timer;
         auto loadedModel = std::make_shared<Model>();
+
+        std::string filepath = GetFullAssetPath(filename);
 
         tinygltf::Model model;
         tinygltf::TinyGLTF loader;
@@ -69,6 +71,23 @@ namespace PathTracer {
 
         if (!err.empty()) {
             LOG_ERROR("Model Loader: {}", err.c_str());
+        }
+
+        std::string modelRootDir;
+        auto lastSlash = filepath.find_last_of('/');
+        if (lastSlash != std::string::npos) {
+            modelRootDir = filepath.substr(0, lastSlash + 1);
+        }
+
+        loadedModel->textures.reserve(model.images.size());
+        for (const auto& image : model.images) {
+            if (image.uri.empty()) {
+                LOG_ERROR("Embedded textures not supported, skipping image");
+                continue;
+            }
+
+            std::string texFilename = modelRootDir + image.uri;
+            loadedModel->textures.push_back(GetTexture(texFilename));
         }
 
         loadedModel->materials.reserve(model.materials.size());
