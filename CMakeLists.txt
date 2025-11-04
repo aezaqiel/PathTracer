@@ -24,7 +24,7 @@ if(WIN32)
     set(VOLK_STATIC_DEFINES VK_USE_PLATFORM_WIN32_KHR)
 endif()
 
-set(TINYGLTF_HEADER_ONLY OFF CACHE INTERNAL "" FORCE)
+set(TINYGLTF_HEADER_ONLY ON CACHE INTERNAL "" FORCE)
 set(TINYGLTF_INSTALL OFF CACHE INTERNAL "" FORCE)
 
 add_subdirectory(thirdparty/volk)
@@ -55,6 +55,9 @@ add_executable(${PROJECT_NAME}
 
     src/Scene/Camera.hpp
     src/Scene/Camera.cpp
+    src/Scene/Mesh.hpp
+    src/Scene/Model.hpp
+    src/Scene/Model.cpp
 
     src/RHI/VulkanTypes.hpp
     src/RHI/VulkanContext.hpp
@@ -88,6 +91,7 @@ add_executable(${PROJECT_NAME}
 
     src/Platform/VMA/VMAImpl.cpp
     src/Platform/STB/STBImpl.cpp
+    src/Platform/TinyGLTF/TinyGLTFImpl.cpp
 )
 
 target_include_directories(${PROJECT_NAME}
@@ -110,9 +114,13 @@ target_compile_definitions(${PROJECT_NAME}
 PRIVATE
     _CRT_SECURE_NO_WARNINGS
     NOMINMAX
-    SHADER_DIR=\"${SHADER_BIN_DIR}\"
     GLFW_INCLUDE_NONE
-    TINYGLTF_NOEXCEPTION 
+    TINYGLTF_NOEXCEPTION
+    # TINYGLTF_NO_INCLUDE_STB_IMAGE
+    # TINYGLTF_NO_INCLUDE_STB_IMAGE_WRITE
+
+    SHADER_DIR=\"${SHADER_BIN_DIR}/\"
+    ASSET_DIR=\"${CMAKE_CURRENT_SOURCE_DIR}/assets/\"
 )
 
 if(WIN32)

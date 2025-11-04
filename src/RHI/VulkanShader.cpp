@@ -7,7 +7,7 @@ namespace PathTracer {
     VulkanShader::VulkanShader(std::shared_ptr<VulkanDevice> device, VkShaderStageFlagBits stage, const std::string& filename)
         : m_Device(device), m_Stage(stage)
     {
-        std::vector<char> src = ReadFile(std::format("{}/{}", SHADER_DIR, filename));
+        std::vector<char> src = ReadFile(std::format("{}{}", SHADER_DIR, filename));
 
         VkShaderModuleCreateInfo createInfo {
             .sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
