@@ -142,9 +142,9 @@ namespace PathTracer {
 
         m_StagingBuffer->Unmap();
 
-        DestroySamplers();
-
         m_CommandManager->WaitIdle();
+
+        DestroySamplers();
     }
 
     void Renderer::LoadScene(std::shared_ptr<Model> model)
@@ -224,12 +224,12 @@ namespace PathTracer {
                 vkCmdCopyBufferToImage(cmd, staging->GetBuffer(), texture->GetImage(), VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &copy);
 
                 barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-                barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+                barrier.dstAccessMask = VK_ACCESS_NONE;
                 barrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
                 barrier.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
                 vkCmdPipelineBarrier(cmd,
                     VK_PIPELINE_STAGE_TRANSFER_BIT,
-                    VK_PIPELINE_STAGE_RAY_TRACING_SHADER_BIT_KHR,
+                    VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
                     0,
                     0, nullptr,
                     0, nullptr,
@@ -237,10 +237,10 @@ namespace PathTracer {
                 );
             });
 
-            CreateSamplers(m_SceneTextures.size());
-
             m_SceneTextures.push_back(texture);
         }
+
+        CreateSamplers(m_SceneTextures.size());
 
         VkDeviceSize matBufferSize = sizeof(Material) * model->GetMaterialCount();
         m_MaterialBuffer = std::make_shared<VulkanBuffer>(m_Device, VulkanBuffer::Spec {

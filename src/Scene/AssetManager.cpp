@@ -74,9 +74,9 @@ namespace PathTracer {
         }
 
         std::string modelRootDir;
-        auto lastSlash = filepath.find_last_of('/');
+        auto lastSlash = filename.find_last_of('/');
         if (lastSlash != std::string::npos) {
-            modelRootDir = filepath.substr(0, lastSlash + 1);
+            modelRootDir = filename.substr(0, lastSlash + 1);
         }
 
         loadedModel->textures.reserve(model.images.size());

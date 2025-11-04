@@ -122,7 +122,9 @@ namespace PathTracer {
         VkPhysicalDeviceFeatures2 features {
             .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2,
             .pNext = &dynamicRendering,
-            .features = {}
+            .features = {
+                .samplerAnisotropy = VK_TRUE
+            }
         };
 
         VkDeviceCreateInfo createInfo {
