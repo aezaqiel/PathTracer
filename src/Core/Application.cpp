@@ -15,6 +15,12 @@ namespace PathTracer {
         m_Window = std::make_shared<Window>(Window::Config(1280, 720, "PathTracer"));
         m_Window->BindEventQueue(m_EventQueue.get());
 
+        m_Camera = std::make_unique<Camera>(
+            45.0f,
+            static_cast<f32>(m_Window->GetWidth()) / static_cast<f32>(m_Window->GetHeight()),
+            0.1f, 100.0f
+        );
+
         m_Renderer = std::make_unique<Renderer>(m_Window);
     }
 
@@ -32,8 +38,13 @@ namespace PathTracer {
                 m_Running = false;
             }
 
+            m_Camera->OnUpdate(*m_Timer);
+
             if (!m_Minimized) {
                 Renderer::RenderPacket packet;
+
+                packet.camera = m_Camera.get();
+
                 m_Renderer->Submit(packet);
             }
         }
@@ -60,6 +71,7 @@ namespace PathTracer {
             });
 
             Input::OnEvent(dispatcher);
+            m_Camera->OnEvent(dispatcher);
         }
     }
 

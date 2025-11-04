@@ -2,6 +2,8 @@
 
 #include "Core/Window.hpp"
 
+#include "Scene/Camera.hpp"
+
 #include "RHI/VulkanContext.hpp"
 #include "RHI/VulkanDevice.hpp"
 #include "RHI/VulkanSwapchain.hpp"
@@ -22,6 +24,7 @@ namespace PathTracer {
     public:
         struct RenderPacket
         {
+            Camera* camera { nullptr };
         };
 
     public:
@@ -68,6 +71,8 @@ namespace PathTracer {
         std::shared_ptr<VulkanDevice> m_Device;
         std::shared_ptr<VulkanSwapchain> m_Swapchain;
         std::shared_ptr<VulkanCommandManager> m_CommandManager;
+
+        std::shared_ptr<VulkanBuffer> m_CameraBuffer;
 
         std::shared_ptr<VulkanImage> m_StorageImage;
         std::shared_ptr<VulkanBuffer> m_StagingBuffer;

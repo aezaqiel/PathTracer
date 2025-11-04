@@ -6,6 +6,8 @@
 
 #include "Renderer/Renderer.hpp"
 
+#include "Scene/Camera.hpp"
+
 namespace PathTracer {
 
     class Application
@@ -27,6 +29,8 @@ namespace PathTracer {
 
         std::unique_ptr<EventQueue> m_EventQueue;
         std::shared_ptr<Window> m_Window;
+
+        std::unique_ptr<Camera> m_Camera;
 
         std::unique_ptr<Renderer> m_Renderer;
     };

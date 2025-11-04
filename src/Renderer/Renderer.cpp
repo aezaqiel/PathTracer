@@ -12,6 +12,13 @@ namespace PathTracer {
         glm::vec3 pos;
     };
 
+    struct CameraUBO
+    {
+        glm::mat4 inverseView { 1.0f };
+        glm::mat4 inverseProj { 1.0f };
+        glm::vec3 position { 0.0f };
+    };
+
     Renderer::Renderer(std::shared_ptr<Window> window)
         : m_Window(window)
     {
@@ -25,6 +32,12 @@ namespace PathTracer {
         m_Swapchain->Recreate(m_Width, m_Height);
 
         m_CommandManager = std::make_shared<VulkanCommandManager>(m_Device, m_Swapchain);
+
+        m_CameraBuffer = std::make_shared<VulkanBuffer>(m_Device, VulkanBuffer::Spec {
+            .size = sizeof(CameraUBO),
+            .usage = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+            .memoryUsage = VMA_MEMORY_USAGE_AUTO_PREFER_HOST
+        });
 
         m_StorageImage = std::make_shared<VulkanImage>(m_Device, VulkanImage::Spec {
             .width = m_Width,
@@ -97,6 +110,10 @@ namespace PathTracer {
             {
                 .type = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
                 .descriptorCount = 1,
+            },
+            {
+                .type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+                .descriptorCount = 1
             }
         };
         
@@ -105,11 +122,13 @@ namespace PathTracer {
         m_DescriptorSetLayout = VulkanDescriptorSetLayout::Builder(m_Device)
             .AddBinding(0, VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR, VK_SHADER_STAGE_RAYGEN_BIT_KHR)
             .AddBinding(1, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_MISS_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR)
+            .AddBinding(2, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_RAYGEN_BIT_KHR)
             .Build();
 
         m_DescriptorSet = VulkanDescriptorWriter(m_Device, m_DescriptorSetLayout, m_DescriptorPool)
             .WriteAccelerationStructure(0, m_TLAS)
             .WriteImage(1, m_StorageImage, VK_IMAGE_LAYOUT_GENERAL, VK_NULL_HANDLE)
+            .WriteBuffer(2, m_CameraBuffer, 0)
             .Build().value();
 
         m_PipelineLayout = VulkanPipelineLayout::Builder(m_Device)
@@ -234,6 +253,16 @@ namespace PathTracer {
 
     void Renderer::Draw(const RenderPacket& packet)
     {
+        if (packet.camera) {
+            CameraUBO ubo {
+                .inverseView = glm::inverse(packet.camera->GetViewMatrix()),
+                .inverseProj = glm::inverse(packet.camera->GetProjMatrix()),
+                .position = packet.camera->GetPosition()
+            };
+
+            m_CameraBuffer->Write(&ubo, sizeof(CameraUBO));
+        }
+
         if (const auto& frame = m_CommandManager->BeginFrame()) {
             VkCommandBufferBeginInfo beginInfo
             {
@@ -412,6 +441,7 @@ namespace PathTracer {
         m_DescriptorSet = VulkanDescriptorWriter(m_Device, m_DescriptorSetLayout, m_DescriptorPool)
             .WriteAccelerationStructure(0, m_TLAS)
             .WriteImage(1, m_StorageImage, VK_IMAGE_LAYOUT_GENERAL, VK_NULL_HANDLE)
+            .WriteBuffer(2, m_CameraBuffer, 0)
             .Build().value();
     }
 
