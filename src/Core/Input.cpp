@@ -34,7 +34,7 @@ namespace PathTracer {
 
     bool Input::IsMouseButtonDown(MouseButton button)
     {
-        return s_MouseButtonData.find(button) != s_MouseButtonData.end() && s_MouseButtonData[button].state == KeyState::Pressed;
+        return s_MouseButtonData.find(button) != s_MouseButtonData.end() && (s_MouseButtonData[button].state == KeyState::Pressed || s_MouseButtonData[button].state == KeyState::Held);
     }
 
     bool Input::IsMouseButtonReleased(MouseButton button)
