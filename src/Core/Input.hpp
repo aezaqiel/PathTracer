@@ -1,6 +1,7 @@
 #pragma once
 
 #include "KeyCodes.hpp"
+#include "Events.hpp"
 
 namespace PathTracer {
 
@@ -35,11 +36,13 @@ namespace PathTracer {
         static std::pair<f32, f32> GetMousePosition();
 
     protected:
+        static void Update();
+        static void OnEvent(EventDispatcher& dispatcher);
+
+    private:
         static void UpdateKeyState(KeyCode key, KeyState state);
         static void UpdateButtonState(MouseButton button, KeyState state);
         static void UpdateMousePosition(f32 x, f32 y);
-
-        static void Update();
 
     private:
         inline static std::map<KeyCode, KeyData> s_KeyData;

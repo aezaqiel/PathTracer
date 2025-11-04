@@ -59,25 +59,6 @@ namespace PathTracer {
         return s_MousePos.load(std::memory_order_relaxed);
     }
 
-    void Input::UpdateKeyState(KeyCode key, KeyState state)
-    {
-        auto& data = s_KeyData[key];
-        data.oldState = data.state;
-        data.state = state;
-    }
-
-    void Input::UpdateButtonState(MouseButton button, KeyState state)
-    {
-        auto& data = s_MouseButtonData[button];
-        data.oldState = data.state;
-        data.state = state;
-    }
-
-    void Input::UpdateMousePosition(f32 x, f32 y)
-    {
-        s_MousePos.store({ x, y }, std::memory_order_relaxed);
-    }
-
     void Input::Update()
     {
         for (auto& [key, data] : s_KeyData) {
@@ -97,6 +78,53 @@ namespace PathTracer {
                 data.state = KeyState::None;
             }
         }
+    }
+
+    void Input::OnEvent(EventDispatcher& dispatcher)
+    {
+        dispatcher.Dispatch<KeyPressedEvent>([](const KeyPressedEvent& e) {
+            if (!e.repeat) Input::UpdateKeyState(e.keycode, KeyState::Pressed);
+            return false;
+        });
+
+        dispatcher.Dispatch<KeyReleasedEvent>([](const KeyReleasedEvent& e) {
+            Input::UpdateKeyState(e.keycode, KeyState::Released);
+            return false;
+        });
+
+        dispatcher.Dispatch<MouseButtonPressedEvent>([](const MouseButtonPressedEvent& e) {
+            Input::UpdateButtonState(e.button, KeyState::Pressed);
+            return false;
+        });
+
+        dispatcher.Dispatch<MouseButtonReleasedEvent>([](const MouseButtonReleasedEvent& e) {
+            Input::UpdateButtonState(e.button, KeyState::Released);
+            return false;
+        });
+
+        dispatcher.Dispatch<MouseMovedEvent>([](const MouseMovedEvent& e) {
+            Input::UpdateMousePosition(e.x, e.y);
+            return false;
+        });
+    }
+
+    void Input::UpdateKeyState(KeyCode key, KeyState state)
+    {
+        auto& data = s_KeyData[key];
+        data.oldState = data.state;
+        data.state = state;
+    }
+
+    void Input::UpdateButtonState(MouseButton button, KeyState state)
+    {
+        auto& data = s_MouseButtonData[button];
+        data.oldState = data.state;
+        data.state = state;
+    }
+
+    void Input::UpdateMousePosition(f32 x, f32 y)
+    {
+        s_MousePos.store({ x, y }, std::memory_order_relaxed);
     }
 
 }

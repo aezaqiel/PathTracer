@@ -59,30 +59,7 @@ namespace PathTracer {
                 return false;
             });
 
-            dispatcher.Dispatch<KeyPressedEvent>([](const KeyPressedEvent& e) {
-                if (!e.repeat) Input::UpdateKeyState(e.keycode, KeyState::Pressed);
-                return false;
-            });
-
-            dispatcher.Dispatch<KeyReleasedEvent>([](const KeyReleasedEvent& e) {
-                Input::UpdateKeyState(e.keycode, KeyState::Released);
-                return false;
-            });
-
-            dispatcher.Dispatch<MouseButtonPressedEvent>([](const MouseButtonPressedEvent& e) {
-                Input::UpdateButtonState(e.button, KeyState::Pressed);
-                return false;
-            });
-
-            dispatcher.Dispatch<MouseButtonReleasedEvent>([](const MouseButtonReleasedEvent& e) {
-                Input::UpdateButtonState(e.button, KeyState::Released);
-                return false;
-            });
-
-            dispatcher.Dispatch<MouseMovedEvent>([](const MouseMovedEvent& e) {
-                Input::UpdateMousePosition(e.x, e.y);
-                return false;
-            });
+            Input::OnEvent(dispatcher);
         }
     }
 
