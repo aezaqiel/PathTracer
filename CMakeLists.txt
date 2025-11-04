@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.10)
+cmake_minimum_required(VERSION 3.30)
 
 project(PathTracer
     LANGUAGES C CXX
@@ -24,11 +24,15 @@ if(WIN32)
     set(VOLK_STATIC_DEFINES VK_USE_PLATFORM_WIN32_KHR)
 endif()
 
+set(TINYGLTF_HEADER_ONLY OFF CACHE INTERNAL "" FORCE)
+set(TINYGLTF_INSTALL OFF CACHE INTERNAL "" FORCE)
+
 add_subdirectory(thirdparty/volk)
 add_subdirectory(thirdparty/glm)
 add_subdirectory(thirdparty/vma)
 add_subdirectory(thirdparty/spdlog)
 add_subdirectory(thirdparty/glfw)
+add_subdirectory(thirdparty/tinygltf)
 
 add_executable(${PROJECT_NAME}
     src/Main.cpp
@@ -99,6 +103,7 @@ PRIVATE
     VulkanMemoryAllocator 
     spdlog
     glfw
+    tinygltf
 )
 
 target_compile_definitions(${PROJECT_NAME}
@@ -107,6 +112,7 @@ PRIVATE
     NOMINMAX
     SHADER_DIR=\"${SHADER_BIN_DIR}\"
     GLFW_INCLUDE_NONE
+    TINYGLTF_NOEXCEPTION 
 )
 
 if(WIN32)
