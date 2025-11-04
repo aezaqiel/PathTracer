@@ -84,7 +84,24 @@ namespace PathTracer {
                 };
             }
 
-            loadedModel->materials.push_back(mat);
+            if (src.emissiveFactor.size() == 3) {
+                mat.emissiveFactor = {
+                    static_cast<f32>(src.emissiveFactor[0]),
+                    static_cast<f32>(src.emissiveFactor[1]),
+                    static_cast<f32>(src.emissiveFactor[2])
+                };
+            }
+
+            mat.metallicFactor = static_cast<f32>(pbr.metallicFactor);
+            mat.roughnessFactor = static_cast<f32>(pbr.roughnessFactor);
+
+            mat.baseColorTexture = pbr.baseColorTexture.index;
+            mat.metallicRoughnessTexture = pbr.metallicRoughnessTexture.index;
+            mat.normalTexture = src.normalTexture.index;
+            mat.emissiveTexture = src.emissiveTexture.index;
+            mat.occlusionTexture = src.occlusionTexture.index;
+
+            loadedModel->materials.push_back(std::move(mat));
         }
 
         if (loadedModel->materials.empty()) {
@@ -169,6 +186,50 @@ namespace PathTracer {
 
                         for (usize i = 0; i < vertexCount; ++i) {
                             newMesh.vertices[i].position = *reinterpret_cast<const glm::vec3*>(data + i * stride);
+                        }
+                    }
+
+                    auto normIt = primitive.attributes.find("NORMAL");
+                    if (normIt != primitive.attributes.end()) {
+                        const auto& accessor = model.accessors[normIt->second];
+                        const auto& bufferView = model.bufferViews[accessor.bufferView];
+                        const auto& buffer = model.buffers[bufferView.buffer];
+
+                        const unsigned char* data = buffer.data.data();
+
+                        if (accessor.type == TINYGLTF_TYPE_VEC3 && accessor.componentType == TINYGLTF_COMPONENT_TYPE_FLOAT) {
+                            usize vertexCount = accessor.count;
+                            usize stride = bufferView.byteStride > 0 ? bufferView.byteStride : sizeof(glm::vec3);
+
+                            const unsigned char* buf = data + bufferView.byteOffset + accessor.byteOffset;
+
+                            for (usize i = 0; i < vertexCount; ++i) {
+                                newMesh.vertices[i].normal = *reinterpret_cast<const glm::vec3*>(buf + i * stride);
+                            }
+                        } else {
+                            LOG_WARN("NORMAL attribute is not VEC3/FLOAT, skipping");
+                        }
+                    }
+
+                    auto tcIt = primitive.attributes.find("TEXCOORD_0");
+                    if (tcIt != primitive.attributes.end()) {
+                        const auto& accessor = model.accessors[tcIt->second];
+                        const auto& bufferView = model.bufferViews[accessor.bufferView];
+                        const auto& buffer = model.buffers[bufferView.buffer];
+
+                        const unsigned char* data = buffer.data.data();
+
+                        if (accessor.type == TINYGLTF_TYPE_VEC2 && accessor.componentType == TINYGLTF_COMPONENT_TYPE_FLOAT) {
+                            usize vertexCount = accessor.count;
+                            usize stride = bufferView.byteStride > 0 ? bufferView.byteStride : sizeof(glm::vec2);
+
+                            const unsigned char* buf = data + bufferView.byteOffset + accessor.byteOffset;
+
+                            for (usize i = 0; i < vertexCount; ++i) {
+                                newMesh.vertices[i].texCoord = *reinterpret_cast<const glm::vec2*>(buf + i * stride);
+                            }
+                        } else {
+                            LOG_WARN("TEXCOORD_0 attribute is not VEC2/FLOAT, skipping");
                         }
                     }
 
