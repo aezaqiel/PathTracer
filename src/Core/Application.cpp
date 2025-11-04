@@ -8,6 +8,8 @@ namespace PathTracer {
 
     Application::Application()
     {
+        m_Timer = std::make_unique<Timer>();
+
         m_EventQueue = std::make_unique<EventQueue>();
 
         m_Window = std::make_shared<Window>(Window::Config(1280, 720, "PathTracer"));
@@ -19,6 +21,8 @@ namespace PathTracer {
     void Application::Run()
     {
         while (m_Running) {
+            m_Timer->Tick();
+
             Window::PollEvents();
             Input::Update();
 
