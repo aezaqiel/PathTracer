@@ -57,7 +57,10 @@ add_executable(${PROJECT_NAME}
     src/Scene/Camera.cpp
     src/Scene/Mesh.hpp
     src/Scene/Model.hpp
-    src/Scene/Model.cpp
+    src/Scene/Texture.hpp
+    src/Scene/Texture.cpp
+    src/Scene/AssetManager.hpp
+    src/Scene/AssetManager.cpp
 
     src/RHI/VulkanTypes.hpp
     src/RHI/VulkanContext.hpp

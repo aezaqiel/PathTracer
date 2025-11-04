@@ -81,6 +81,11 @@ namespace PathTracer {
         return *this;
     }
 
+    VulkanDescriptorWriter& VulkanDescriptorWriter::WriteImageArray(u32 binding, const std::vector<std::shared_ptr<VulkanImage>>& images, const std::vector<VkSampler>& sampler)
+    {
+        return *this;
+    }
+
     std::expected<VkDescriptorSet, VkResult> VulkanDescriptorWriter::Build()
     {
         auto allocation = m_Pool->Allocate(m_Layout->GetLayout());

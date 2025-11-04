@@ -32,6 +32,8 @@ namespace PathTracer {
         Renderer(std::shared_ptr<Window> window);
         ~Renderer();
 
+        void LoadScene(std::shared_ptr<Model> model);
+
         void RequestResize(u32 width, u32 height);
         void Submit(const RenderPacket& packet);
 
@@ -73,15 +75,17 @@ namespace PathTracer {
         std::shared_ptr<VulkanSwapchain> m_Swapchain;
         std::shared_ptr<VulkanCommandManager> m_CommandManager;
 
+        std::shared_ptr<VulkanImage> m_StorageImage;
+        std::shared_ptr<VulkanBuffer> m_StagingBuffer;
+
         std::shared_ptr<VulkanBuffer> m_CameraBuffer;
 
-        std::unique_ptr<Model> m_Model;
+        std::vector<std::shared_ptr<VulkanImage>> m_SceneTextures;
+        std::vector<VkSampler> m_SceneSamplers;
+
         std::vector<std::shared_ptr<VulkanBuffer>> m_VertexBuffer;
         std::vector<std::shared_ptr<VulkanBuffer>> m_IndexBuffer;
         std::shared_ptr<VulkanBuffer> m_MaterialBuffer;
-
-        std::shared_ptr<VulkanImage> m_StorageImage;
-        std::shared_ptr<VulkanBuffer> m_StagingBuffer;
         
         std::vector<std::shared_ptr<VulkanBLAS>> m_BLASes;
         std::shared_ptr<VulkanTLAS> m_TLAS;

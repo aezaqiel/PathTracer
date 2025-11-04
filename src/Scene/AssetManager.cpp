@@ -1,24 +1,46 @@
-#include "Model.hpp"
+#include "AssetManager.hpp"
 
 #include <tiny_gltf.h>
 
-#include "Core/Logger.hpp"
 #include "Core/Timer.hpp"
+#include "Core/Logger.hpp"
 
 namespace PathTracer {
 
-    Model::Model(const std::string& filename)
+    std::shared_ptr<Texture> AssetManager::GetTexture(const std::string& filename)
     {
-        Timer timer;
+        if (m_TextureCache.find(filename) != m_TextureCache.end()) {
+            return m_TextureCache[filename];
+        }
 
-        std::string filepath = std::format("{}{}", ASSET_DIR, filename);
-        LoadGLTF(filepath);
+        auto texture = LoadTextureFromFile(GetFullAssetPath(filename));
+        m_TextureCache[filename] = texture;
 
-        LOG_INFO("Loaded {} with {} meshes and {} materials in {} seconds", filename, m_Meshes.size(), m_Materials.size(), static_cast<f32>(timer.GetTotalTime()));
+        return texture;
     }
 
-    void Model::LoadGLTF(const std::string& filepath)
+    std::shared_ptr<Model> AssetManager::GetModel(const std::string& filename)
     {
+        if (m_ModelCache.find(filename) != m_ModelCache.end()) {
+            return m_ModelCache[filename];
+        }
+
+        auto model = LoadModelFromFile(GetFullAssetPath(filename));
+        m_ModelCache[filename] = model;
+
+        return model;
+    }
+
+    std::shared_ptr<Texture> AssetManager::LoadTextureFromFile(const std::string& filepath)
+    {
+        return std::make_shared<Texture>(filepath);
+    }
+
+    std::shared_ptr<Model> AssetManager::LoadModelFromFile(const std::string& filepath)
+    {
+        Timer timer;
+        auto loadedModel = std::make_shared<Model>();
+
         tinygltf::Model model;
         tinygltf::TinyGLTF loader;
 
@@ -38,7 +60,7 @@ namespace PathTracer {
 
         if (!ret) {
             LOG_ERROR("Failed to parse gltf file {}", filepath);
-            return;
+            return nullptr;
         }
 
         if (!warn.empty()) {
@@ -49,28 +71,24 @@ namespace PathTracer {
             LOG_ERROR("Model Loader: {}", err.c_str());
         }
 
-        m_Materials.reserve(model.materials.size());
+        loadedModel->materials.reserve(model.materials.size());
         for (const auto& src : model.materials) {
             Material mat;
 
             const auto& pbr = src.pbrMetallicRoughness;
             if (pbr.baseColorFactor.size() == 4) {
-                mat.color = {
+                mat.baseColorFactor = {
                     static_cast<f32>(pbr.baseColorFactor[0]),
                     static_cast<f32>(pbr.baseColorFactor[1]),
                     static_cast<f32>(pbr.baseColorFactor[2])
                 };
-            } else {
-                mat.color = glm::vec3(1.0f, 0.0f, 1.0f);
             }
 
-            m_Materials.push_back(mat);
+            loadedModel->materials.push_back(mat);
         }
 
-        if (m_Materials.empty()) {
-            m_Materials.push_back(Material {
-                .color = glm::vec3(0.8f, 0.8f, 0.8f)
-            });
+        if (loadedModel->materials.empty()) {
+            loadedModel->materials.push_back(Material{});
         }
 
         std::function<void(const tinygltf::Node&)> processNode;
@@ -154,7 +172,7 @@ namespace PathTracer {
                         }
                     }
 
-                    m_Meshes.push_back(std::move(newMesh));
+                    loadedModel->meshes.push_back(std::move(newMesh));
                 }
             }
 
@@ -169,6 +187,17 @@ namespace PathTracer {
         for (i32 nodeIndex : scene.nodes) {
             processNode(model.nodes[nodeIndex]);
         }
+
+        LOG_INFO("Loaded {} with {} meshes, {} materials, and {} textures in {:.2f} seconds", 
+            filepath, loadedModel->GetMeshCount(), loadedModel->GetMeshCount(), loadedModel->GetTextureCount(),
+            static_cast<f32>(timer.GetTotalTime()));
+
+        return loadedModel;
+    }
+
+    std::string AssetManager::GetFullAssetPath(const std::string& filename)
+    {
+        return std::format("{}{}", ASSET_DIR, filename);
     }
 
 }

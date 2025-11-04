@@ -15,13 +15,18 @@ namespace PathTracer {
         m_Window = std::make_shared<Window>(Window::Config(1280, 720, "PathTracer"));
         m_Window->BindEventQueue(m_EventQueue.get());
 
+        m_AssetManager = std::make_unique<AssetManager>();
+
+        m_Renderer = std::make_unique<Renderer>(m_Window);
+
+        auto model = m_AssetManager->GetModel("Suzanne/Suzanne.gltf");
+        m_Renderer->LoadScene(model);
+
         m_Camera = std::make_unique<Camera>(
             45.0f,
             static_cast<f32>(m_Window->GetWidth()) / static_cast<f32>(m_Window->GetHeight()),
             0.1f, 100.0f
         );
-
-        m_Renderer = std::make_unique<Renderer>(m_Window);
     }
 
     void Application::Run()
