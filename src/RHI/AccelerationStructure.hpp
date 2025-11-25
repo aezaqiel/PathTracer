@@ -25,10 +25,10 @@ namespace RHI {
         VkDeviceAddress GetAddress() const { return m_Address; }
 
     protected:
-        AccelerationStructure(const Device& device);
+        AccelerationStructure(const std::shared_ptr<Device>& device);
 
     protected:
-        const Device& m_Device;
+        std::shared_ptr<Device> m_Device;
 
         VkAccelerationStructureKHR m_AS { VK_NULL_HANDLE };
         std::unique_ptr<Buffer> m_Buffer;
@@ -60,7 +60,7 @@ namespace RHI {
         };
 
     public:
-        BLAS(const Device& device, CommandManager<QueueType::Compute>& queue, const std::span<Geometry>& geometries);
+        BLAS(const std::shared_ptr<Device>& device, CommandManager<QueueType::Compute>& queue, const std::span<Geometry>& geometries);
         virtual ~BLAS() = default;
     };
 
@@ -78,7 +78,7 @@ namespace RHI {
         };
 
     public:
-        TLAS(const Device& device, CommandManager<QueueType::Compute>& queue, const std::span<Instance>& instances);
+        TLAS(const std::shared_ptr<Device>& device, CommandManager<QueueType::Compute>& queue, const std::span<Instance>& instances);
         virtual ~TLAS() = default;
     };
 

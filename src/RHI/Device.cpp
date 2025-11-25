@@ -6,7 +6,7 @@
 
 namespace RHI {
 
-    Device::Device(Instance& instance)
+    Device::Device(const std::shared_ptr<Instance>& instance)
         : m_Instance(instance)
     {
         SelectPhysicalDevice();
@@ -24,9 +24,9 @@ namespace RHI {
     void Device::SelectPhysicalDevice()
     {
         u32 deviceCount = 0;
-        vkEnumeratePhysicalDevices(m_Instance.GetInstance(), &deviceCount, nullptr);
+        vkEnumeratePhysicalDevices(m_Instance->GetInstance(), &deviceCount, nullptr);
         std::vector<VkPhysicalDevice> availableDevices(deviceCount);
-        vkEnumeratePhysicalDevices(m_Instance.GetInstance(), &deviceCount, availableDevices.data());
+        vkEnumeratePhysicalDevices(m_Instance->GetInstance(), &deviceCount, availableDevices.data());
 
         std::multimap<i32, VkPhysicalDevice> scoredDevices;
         for (const auto& device : availableDevices) {
@@ -154,7 +154,7 @@ namespace RHI {
             .pDeviceMemoryCallbacks = nullptr,
             .pHeapSizeLimit = nullptr,
             .pVulkanFunctions = nullptr,
-            .instance = m_Instance.GetInstance(),
+            .instance = m_Instance->GetInstance(),
             .vulkanApiVersion = volkGetInstanceVersion()
         };
 

@@ -1,0 +1,9 @@
+#pragma once
+
+#include <string_view>
+
+namespace PathConfig {
+
+    inline constexpr std::string_view ASSET_DIR = "@ASSET_FOLDER@";
+
+}

@@ -1,3 +1,5 @@
+#include <filesystem>
+
 #include "Logger.hpp"
 
 #include "RHI/Instance.hpp"
@@ -8,6 +10,7 @@
 #include "RHI/AccelerationStructure.hpp"
 
 #include "Scene/SceneLoader.hpp"
+#include "PathConfig.inl"
 
 constexpr u32 WIDTH = 1280;
 constexpr u32 HEIGHT = 720;
@@ -17,14 +20,16 @@ int main()
 {
     Logger::Init();
 
-    RHI::Instance instance;
-    RHI::Device device(instance);
+    std::shared_ptr<RHI::Instance> instance = std::make_shared<RHI::Instance>();
+    std::shared_ptr<RHI::Device> device = std::make_shared<RHI::Device>(instance);
 
-    RHI::CommandManager<RHI::QueueType::Graphics> graphics(device);
-    RHI::CommandManager<RHI::QueueType::Compute> compute(device);
-    RHI::CommandManager<RHI::QueueType::Transfer> transfer(device);
+    std::unique_ptr<RHI::CommandManager<RHI::QueueType::Graphics>> graphics = std::make_unique<RHI::CommandManager<RHI::QueueType::Graphics>>(device);
+    std::unique_ptr<RHI::CommandManager<RHI::QueueType::Compute>> compute = std::make_unique<RHI::CommandManager<RHI::QueueType::Compute>>(device);
+    std::unique_ptr<RHI::CommandManager<RHI::QueueType::Transfer>> transfer = std::make_unique<RHI::CommandManager<RHI::QueueType::Transfer>>(device);
 
-    auto model = Scene::GlTFLoader::Load("../assets/Suzanne.glb");
+    std::filesystem::path assetPath = PathConfig::ASSET_DIR;
+
+    auto model = Scene::GlTFLoader::Load(assetPath / "Suzanne.glb");
     if (!model) return EXIT_FAILURE;
 
     RHI::Buffer vertexBuffer(device, RHI::Buffer::Spec {
@@ -42,33 +47,40 @@ int main()
     indexBuffer.Write(model->indices.data(), indexBuffer.GetSize());
 
     std::vector<std::unique_ptr<RHI::BLAS>> blases;
+    blases.reserve(model->meshes.size());
+
+    for (const auto& mesh : model->meshes) {
+        std::vector<RHI::BLAS::Geometry> geometries;
+        geometries.reserve(mesh.primitives.size());
+
+        for (const auto& primitive : mesh.primitives) {
+            geometries.push_back(RHI::BLAS::Geometry {
+                .vertices = {
+                    .buffer = &vertexBuffer,
+                    .count = static_cast<u32>(model->vertices.size()),
+                    .stride = sizeof(Scene::Vertex),
+                    .offset = 0,
+                    .format = VK_FORMAT_R32G32B32_SFLOAT
+                },
+                .indices = {
+                    .buffer = &indexBuffer,
+                    .count = primitive.indexCount,
+                    .offset = primitive.indexOffset * sizeof(u32)
+                },
+                .isOpaque = true
+            });
+        }
+
+        blases.push_back(std::make_unique<RHI::BLAS>(device, *compute, geometries));
+    }
+
     std::vector<RHI::TLAS::Instance> tlasInstances;
+    tlasInstances.reserve(model->nodes.size());
 
-    for (const auto& obj : model->renderables) {
-        const auto& primitive = model->primitives[obj.primitiveIndex];
-
-        RHI::BLAS::Geometry geometry {
-            .vertices = {
-                .buffer = &vertexBuffer,
-                .count = primitive.indexCount,
-                .stride = sizeof(Scene::Vertex),
-                .offset = primitive.vertexOffset * sizeof(Scene::Vertex),
-                .format = VK_FORMAT_R32G32B32_SFLOAT
-            },
-            .indices = {
-                .buffer = &indexBuffer,
-                .count = primitive.indexCount,
-                .offset = primitive.indexOffset * sizeof(u32)
-            },
-            .isOpaque = true
-        };
-
-        std::vector<RHI::BLAS::Geometry> geometries = { geometry };
-        blases.push_back(std::move(std::make_unique<RHI::BLAS>(device, compute, geometries)));
-
+    for (const auto& node : model->nodes) {
         tlasInstances.push_back(RHI::TLAS::Instance {
-            .blas = blases.back().get(),
-            .transform = obj.transform,
+            .blas = blases[node.meshIndex].get(),
+            .transform = node.transform,
             .instanceCustomIndex = 0,
             .mask = 0xFF,
             .sbtOffset = 0,
@@ -76,7 +88,7 @@ int main()
         });
     }
 
-    RHI::TLAS tlas(device, compute, tlasInstances);
+    std::unique_ptr<RHI::TLAS> tlas = std::make_unique<RHI::TLAS>(device, *compute, tlasInstances);
 
     // RAYTRACING PASSES
     for (u32 s = 0; s < SAMPLES; ++s) {

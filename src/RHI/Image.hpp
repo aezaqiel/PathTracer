@@ -1,5 +1,6 @@
 #pragma once
 
+#include <memory>
 #include "VkTypes.hpp"
 
 namespace RHI {
@@ -18,7 +19,7 @@ namespace RHI {
         };
 
     public:
-        Image(const Device& device, const Spec& spec);
+        Image(const std::shared_ptr<Device>& device, const Spec& spec);
         ~Image();
 
         inline VkImage GetImage() const { return m_Image; }
@@ -29,7 +30,7 @@ namespace RHI {
         inline VkImageLayout GetLayout() const { return m_Layout; }
 
     private:
-        const Device& m_Device;
+        std::shared_ptr<Device> m_Device;
 
         VkImage m_Image { VK_NULL_HANDLE };
         VmaAllocation m_Allocation { VK_NULL_HANDLE };

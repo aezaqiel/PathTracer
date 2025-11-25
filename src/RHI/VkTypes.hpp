@@ -5,7 +5,7 @@
 
 #ifndef NDEBUG
     #include "Logger.hpp"
-    #define VK_CHECK(expr) do { VkResult result_ = (expr); if (result_ != VK_SUCCESS) { LOG_FATAL("VK_CHECK Failed: {}", #expr); std::abort(); } } while (false)
+    #define VK_CHECK(expr) do { VkResult result_ = (expr); if (result_ != VK_SUCCESS) { LOG_FATAL("VK_CHECK Failed: {}", #expr); } } while (false)
 #else
     #define VK_CHECK(expr) (expr)
 #endif

@@ -1,5 +1,6 @@
 #pragma once
 
+#include <memory>
 #include <set>
 
 #include "Types.hpp"
@@ -20,7 +21,7 @@ namespace RHI {
     class Device
     {
     public:
-        Device(Instance& instance);
+        Device(const std::shared_ptr<Instance>& instance);
         ~Device();
 
         inline VkPhysicalDevice GetPhysicalDevice() const { return m_PhysicalDevice; }
@@ -89,7 +90,7 @@ namespace RHI {
         inline static constexpr usize s_FrameInFlight { 3 };
 
     private:
-        Instance& m_Instance;
+        std::shared_ptr<Instance> m_Instance;
 
         VkPhysicalDevice m_PhysicalDevice { VK_NULL_HANDLE };
         VkDevice m_Device { VK_NULL_HANDLE };

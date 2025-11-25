@@ -4,7 +4,7 @@
 
 namespace RHI {
 
-    Image::Image(const Device& device, const Spec& spec)
+    Image::Image(const std::shared_ptr<Device>& device, const Spec& spec)
         : m_Device(device), m_Extent(spec.extent), m_Format(spec.format)
     {
         VkImageCreateInfo imageInfo {
@@ -29,7 +29,7 @@ namespace RHI {
         memset(&allocationInfo, 0, sizeof(VmaAllocationCreateInfo));
         allocationInfo.usage = spec.memory;
 
-        VK_CHECK(vmaCreateImage(m_Device.GetAllocator(), &imageInfo, &allocationInfo, &m_Image, &m_Allocation, nullptr));
+        VK_CHECK(vmaCreateImage(m_Device->GetAllocator(), &imageInfo, &allocationInfo, &m_Image, &m_Allocation, nullptr));
 
         VkImageViewCreateInfo viewInfo {
             .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
@@ -53,13 +53,13 @@ namespace RHI {
             }
         };
 
-        VK_CHECK(vkCreateImageView(m_Device.GetDevice(), &viewInfo, nullptr, &m_View));
+        VK_CHECK(vkCreateImageView(m_Device->GetDevice(), &viewInfo, nullptr, &m_View));
     }
 
     Image::~Image()
     {
-        vkDestroyImageView(m_Device.GetDevice(), m_View, nullptr);
-        vmaDestroyImage(m_Device.GetAllocator(), m_Image, m_Allocation);
+        vkDestroyImageView(m_Device->GetDevice(), m_View, nullptr);
+        vmaDestroyImage(m_Device->GetAllocator(), m_Image, m_Allocation);
     }
 
 }

@@ -17,17 +17,17 @@ namespace RHI {
 
     }
 
-    AccelerationStructure::AccelerationStructure(const Device& device)
+    AccelerationStructure::AccelerationStructure(const std::shared_ptr<Device>& device)
         : m_Device(device)
     {
     }
 
     AccelerationStructure::~AccelerationStructure()
     {
-        vkDestroyAccelerationStructureKHR(m_Device.GetDevice(), m_AS, nullptr);
+        vkDestroyAccelerationStructureKHR(m_Device->GetDevice(), m_AS, nullptr);
     }
 
-    BLAS::BLAS(const Device& device, CommandManager<QueueType::Compute>& queue, const std::span<Geometry>& geometries)
+    BLAS::BLAS(const std::shared_ptr<Device>& device, CommandManager<QueueType::Compute>& queue, const std::span<Geometry>& geometries)
         : AccelerationStructure(device)
     {
         std::vector<VkAccelerationStructureGeometryKHR> vkGeometries;
@@ -86,12 +86,13 @@ namespace RHI {
             .buildScratchSize = 0
         };
 
-        u32 maxCount = 0;
+        std::vector<u32> maxPrimitiveCounts;
+        maxPrimitiveCounts.reserve(ranges.size());
         for (const auto& range : ranges) {
-            maxCount = std::max(maxCount, range.primitiveCount);
+            maxPrimitiveCounts.push_back(range.primitiveCount);
         }
 
-        vkGetAccelerationStructureBuildSizesKHR(m_Device.GetDevice(), VK_ACCELERATION_STRUCTURE_BUILD_TYPE_DEVICE_KHR, &buildInfo, &maxCount, &sizeInfo);
+        vkGetAccelerationStructureBuildSizesKHR(m_Device->GetDevice(), VK_ACCELERATION_STRUCTURE_BUILD_TYPE_DEVICE_KHR, &buildInfo, maxPrimitiveCounts.data(), &sizeInfo);
 
         m_Buffer = std::make_unique<Buffer>(m_Device, Buffer::Spec {
             .size = sizeInfo.accelerationStructureSize,
@@ -109,7 +110,7 @@ namespace RHI {
             .type = VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_KHR,
             .deviceAddress = 0
         };
-        VK_CHECK(vkCreateAccelerationStructureKHR(m_Device.GetDevice(), &asInfo, nullptr, &m_AS));
+        VK_CHECK(vkCreateAccelerationStructureKHR(m_Device->GetDevice(), &asInfo, nullptr, &m_AS));
 
         Buffer scratch(m_Device, Buffer::Spec {
             .size = sizeInfo.buildScratchSize,
@@ -149,9 +150,7 @@ namespace RHI {
         });
 
         queue.Submit({}, {});
-
-        // TODO: should be queue sync not whole device
-        m_Device.WaitIdle();
+        queue.Sync();
 
         VkAccelerationStructureDeviceAddressInfoKHR addressInfo {
             .sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_DEVICE_ADDRESS_INFO_KHR,
@@ -159,10 +158,10 @@ namespace RHI {
             .accelerationStructure = m_AS
         };
 
-        m_Address = vkGetAccelerationStructureDeviceAddressKHR(m_Device.GetDevice(), &addressInfo);
+        m_Address = vkGetAccelerationStructureDeviceAddressKHR(m_Device->GetDevice(), &addressInfo);
     }
 
-    TLAS::TLAS(const Device& device, CommandManager<QueueType::Compute>& queue, const std::span<Instance>& instances)
+    TLAS::TLAS(const std::shared_ptr<Device>& device, CommandManager<QueueType::Compute>& queue, const std::span<Instance>& instances)
         : AccelerationStructure(device)
     {
         std::vector<VkAccelerationStructureInstanceKHR> vkInstances;
@@ -227,7 +226,7 @@ namespace RHI {
         });
 
         queue.Submit({}, {});
-        m_Device.WaitIdle();
+        queue.Sync();
 
         VkAccelerationStructureGeometryKHR geometry {
             .sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_KHR,
@@ -268,7 +267,7 @@ namespace RHI {
             .buildScratchSize = 0
         };
 
-        vkGetAccelerationStructureBuildSizesKHR(m_Device.GetDevice(), VK_ACCELERATION_STRUCTURE_BUILD_TYPE_DEVICE_KHR, &buildInfo, &count, &sizeInfo);
+        vkGetAccelerationStructureBuildSizesKHR(m_Device->GetDevice(), VK_ACCELERATION_STRUCTURE_BUILD_TYPE_DEVICE_KHR, &buildInfo, &count, &sizeInfo);
 
         m_Buffer = std::make_unique<Buffer>(m_Device, Buffer::Spec {
             .size = sizeInfo.accelerationStructureSize,
@@ -287,7 +286,7 @@ namespace RHI {
             .deviceAddress = 0
         };
 
-        VK_CHECK(vkCreateAccelerationStructureKHR(m_Device.GetDevice(), &asInfo, nullptr, &m_AS));
+        VK_CHECK(vkCreateAccelerationStructureKHR(m_Device->GetDevice(), &asInfo, nullptr, &m_AS));
 
         Buffer scratch(m_Device, Buffer::Spec {
             .size = sizeInfo.buildScratchSize,
@@ -311,7 +310,7 @@ namespace RHI {
         });
 
         queue.Submit({}, {});
-        m_Device.WaitIdle();
+        queue.Sync();
 
         VkAccelerationStructureDeviceAddressInfoKHR addressInfo {
             .sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_DEVICE_ADDRESS_INFO_KHR,
@@ -319,7 +318,7 @@ namespace RHI {
             .accelerationStructure = m_AS
         };
 
-        m_Address = vkGetAccelerationStructureDeviceAddressKHR(m_Device.GetDevice(), &addressInfo);
+        m_Address = vkGetAccelerationStructureDeviceAddressKHR(m_Device->GetDevice(), &addressInfo);
     }
 
 }

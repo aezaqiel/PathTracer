@@ -1,5 +1,7 @@
 #pragma once
 
+#include <memory>
+
 #include "VkTypes.hpp"
 
 namespace RHI {
@@ -17,7 +19,7 @@ namespace RHI {
         };
 
     public:
-        Buffer(const Device& device, const Spec& spec);
+        Buffer(const std::shared_ptr<Device>& device, const Spec& spec);
         ~Buffer();
 
         inline VkBuffer GetBuffer() const { return m_Buffer; }
@@ -30,7 +32,7 @@ namespace RHI {
         void Write(void* data, VkDeviceSize size, VkDeviceSize offset = 0);
 
     private:
-        const Device& m_Device;
+        std::shared_ptr<Device> m_Device;
 
         VkBuffer m_Buffer { VK_NULL_HANDLE };
         VmaAllocation m_Allocation { VK_NULL_HANDLE };

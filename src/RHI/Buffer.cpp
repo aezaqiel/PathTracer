@@ -4,7 +4,7 @@
 
 namespace RHI {
 
-    Buffer::Buffer(const Device& device, const Spec& spec)
+    Buffer::Buffer(const std::shared_ptr<Device>& device, const Spec& spec)
         : m_Device(device), m_Size(spec.size)
     {
         VkBufferCreateInfo bufferInfo {
@@ -26,7 +26,7 @@ namespace RHI {
             allocationInfo.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT;
         }
 
-        VK_CHECK(vmaCreateBuffer(m_Device.GetAllocator(), &bufferInfo, &allocationInfo, &m_Buffer, &m_Allocation, nullptr));
+        VK_CHECK(vmaCreateBuffer(m_Device->GetAllocator(), &bufferInfo, &allocationInfo, &m_Buffer, &m_Allocation, nullptr));
 
         if (spec.usage & VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT) {
             VkBufferDeviceAddressInfo addressInfo {
@@ -35,14 +35,14 @@ namespace RHI {
                 .buffer = m_Buffer
             };
 
-            m_DeviceAddress = vkGetBufferDeviceAddress(m_Device.GetDevice(), &addressInfo);
+            m_DeviceAddress = vkGetBufferDeviceAddress(m_Device->GetDevice(), &addressInfo);
         }
     }
 
     Buffer::~Buffer()
     {
         if (m_MappedData) Unmap();
-        vmaDestroyBuffer(m_Device.GetAllocator(), m_Buffer, m_Allocation);
+        vmaDestroyBuffer(m_Device->GetAllocator(), m_Buffer, m_Allocation);
     }
 
     void* Buffer::Map(VkDeviceSize size, VkDeviceSize offset)
@@ -52,7 +52,7 @@ namespace RHI {
             Unmap();
         }
 
-        VK_CHECK(vmaMapMemory(m_Device.GetAllocator(), m_Allocation, &m_MappedData));
+        VK_CHECK(vmaMapMemory(m_Device->GetAllocator(), m_Allocation, &m_MappedData));
 
         return reinterpret_cast<void*>(reinterpret_cast<u8*>(m_MappedData) + offset);
     }
@@ -64,7 +64,7 @@ namespace RHI {
             return;
         }
 
-        vmaUnmapMemory(m_Device.GetAllocator(), m_Allocation);
+        vmaUnmapMemory(m_Device->GetAllocator(), m_Allocation);
         m_MappedData = nullptr;
     }
 

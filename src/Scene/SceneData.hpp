@@ -16,9 +16,9 @@ namespace Scene {
 
     struct ImageData
     {
-        u32 width = 0;
-        u32 height = 0;
-        u32 channels = 4;
+        u32 width { 0 };
+        u32 height { 0 };
+        u32 channels { 4 };
         std::vector<std::byte> pixels;
     };
 
@@ -31,36 +31,41 @@ namespace Scene {
             Blend
         };
 
-        glm::vec4 baseColorFactor = glm::vec4(1.0f);
-        glm::vec3 emissiveFactor = glm::vec4(0.0f);
+        glm::vec4 baseColorFactor { 1.0f };
+        glm::vec3 emissiveFactor { 0.0f };
 
-        f32 metallicFactor = 1.0f;
-        f32 roughnessFactor = 1.0f;
+        f32 metallicFactor { 1.0f };
+        f32 roughnessFactor { 1.0f };
 
-        f32 alphaCutoff = 0.5f;
-        AlphaMode alphaMode = AlphaMode::Opaque;
+        f32 alphaCutoff { 0.5f };
+        AlphaMode alphaMode { AlphaMode::Opaque };
 
-        i32 baseColorTexture = -1;
-        i32 metallicRoughnessTexture = -1;
-        i32 normalTexture = -1;
-        i32 occlusionTexture = -1;
-        i32 emissiveTexture = -1;
+        i32 baseColorTexture { -1 };
+        i32 metallicRoughnessTexture { -1 };
+        i32 normalTexture { -1 };
+        i32 occlusionTexture { -1 };
+        i32 emissiveTexture { -1 };
 
-        i32 _p0[1];
+        i32 _p0[1] { 0 };
     };
 
     struct MeshPrimitive
     {
-        u32 indexOffset = 0;
-        u32 indexCount = 0;
-        u32 vertexOffset = 0;
-        u32 materialIndex = 0;
+        u32 indexOffset { 0 };
+        u32 indexCount { 0 };
+        u32 vertexOffset { 0 };
+        u32 materialIndex { 0 };
     };
 
-    struct RenderObject
+    struct Mesh
     {
-        glm::mat4 transform = glm::mat4(1.0f);
-        u32 primitiveIndex;
+        std::vector<MeshPrimitive> primitives;
+    };
+
+    struct Node
+    {
+        glm::mat4 transform { 1.0f };
+        u32 meshIndex { 0 };
     };
 
     struct SceneData
@@ -71,8 +76,8 @@ namespace Scene {
         std::vector<MaterialData> materials;
         std::vector<ImageData> textures;
 
-        std::vector<MeshPrimitive> primitives;
-        std::vector<RenderObject> renderables;
+        std::vector<Mesh> meshes;
+        std::vector<Node> nodes;
     };
 
 }
