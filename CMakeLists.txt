@@ -42,6 +42,8 @@ add_executable(${PROJECT_NAME}
     src/Core/Application.cpp
     src/Core/Logger.hpp
     src/Core/Logger.cpp
+    src/Core/Window.hpp
+    src/Core/Window.cpp
 
     src/RHI/VkTypes.hpp
     src/RHI/Instance.hpp

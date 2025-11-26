@@ -1,6 +1,6 @@
 #include "Application.hpp"
 
-#include "PathConfig.inl"
+#include "Window.hpp"
 
 #include "RHI/Instance.hpp"
 #include "RHI/Device.hpp"
@@ -10,6 +10,9 @@
 #include "RHI/AccelerationStructure.hpp"
 
 #include "Scene/SceneLoader.hpp"
+#include "PathConfig.inl"
+
+#define BIND_EVENT_FN(fn) [this](auto&&... args) -> decltype(auto) { return this->fn(std::forward<decltype(args)>(args)...); }
 
 namespace {
 
@@ -21,6 +24,9 @@ namespace {
 
 Application::Application()
 {
+    m_Window = std::make_unique<Window>(1280, 720, "PathTracer");
+    m_Window->BindEventCallback(BIND_EVENT_FN(Application::DispatchEvents));
+
     std::shared_ptr<RHI::Instance> instance = std::make_shared<RHI::Instance>();
     std::shared_ptr<RHI::Device> device = std::make_shared<RHI::Device>(instance);
 
@@ -97,9 +103,24 @@ Application::~Application()
 
 void Application::Run()
 {
-    // RAYTRACING PASSES
-    for (u32 s = 0; s < SAMPLES; ++s) {
-    }
+    while (m_Running) {
+        Window::PollEvents();
 
-    // GRAPHICS PASS (POSTPROCESSING)
+        if (!m_Minimized) {
+        }
+    }
+}
+
+void Application::DispatchEvents(const Event& event)
+{
+    EventDispatcher dispatcher(event);
+
+    dispatcher.Dispatch<WindowClosedEvent>([&](const WindowClosedEvent&) {
+        m_Running = false;
+        return true;
+    });
+
+    dispatcher.Dispatch<WindowMinimizeEvent>([&](const WindowMinimizeEvent& e) {
+        m_Minimized = e.minimized;
+    });
 }
