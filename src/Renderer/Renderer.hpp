@@ -1,0 +1,35 @@
+#pragma once
+
+#include "RHI/Instance.hpp"
+#include "RHI/Device.hpp"
+#include "RHI/CommandManager.hpp"
+#include "RHI/Buffer.hpp"
+#include "RHI/Image.hpp"
+#include "RHI/AccelerationStructure.hpp"
+
+class Window;
+
+class Renderer
+{
+public:
+    Renderer(const std::shared_ptr<Window>& window);
+    ~Renderer();
+
+    void Draw();
+
+private:
+    std::shared_ptr<Window> m_Window;
+
+    std::shared_ptr<RHI::Instance> m_Instance;
+    std::shared_ptr<RHI::Device> m_Device;
+
+    std::unique_ptr<RHI::CommandManager<RHI::QueueType::Graphics>> m_Graphics;
+    std::unique_ptr<RHI::CommandManager<RHI::QueueType::Compute>> m_Compute;
+    std::unique_ptr<RHI::CommandManager<RHI::QueueType::Transfer>> m_Transfer;
+
+    std::unique_ptr<RHI::Buffer> m_VertexBuffer;
+    std::unique_ptr<RHI::Buffer> m_IndexBuffer;
+
+    std::vector<std::unique_ptr<RHI::BLAS>> m_BLASes;
+    std::unique_ptr<RHI::TLAS> m_TLAS;
+};

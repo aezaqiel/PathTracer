@@ -3,6 +3,7 @@
 #include "Events.hpp"
 
 class Window;
+class Renderer;
 
 class Application
 {
@@ -19,5 +20,6 @@ private:
     bool m_Running { true };
     bool m_Minimized { false };
 
-    std::unique_ptr<Window> m_Window;
+    std::shared_ptr<Window> m_Window;
+    std::unique_ptr<Renderer> m_Renderer;
 };

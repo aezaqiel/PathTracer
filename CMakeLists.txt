@@ -66,6 +66,9 @@ add_executable(${PROJECT_NAME}
     src/Scene/SceneLoader.hpp
     src/Scene/SceneLoader.cpp
 
+    src/Renderer/Renderer.hpp
+    src/Renderer/Renderer.cpp
+
     src/Platform/VMAImpl.cpp
     src/Platform/TinyGlTFImpl.cpp
     src/Platform/STBImpl.cpp
