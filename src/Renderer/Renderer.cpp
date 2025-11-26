@@ -8,7 +8,7 @@
 Renderer::Renderer(const std::shared_ptr<Window>& window)
     : m_Window(window)
 {
-    m_Instance = std::make_shared<RHI::Instance>();
+    m_Instance = std::make_shared<RHI::Instance>(window);
     m_Device = std::make_shared<RHI::Device>(m_Instance);
 
     m_Graphics = std::make_unique<RHI::CommandManager<RHI::QueueType::Graphics>>(m_Device);

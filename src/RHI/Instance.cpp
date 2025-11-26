@@ -1,5 +1,10 @@
 #include "Instance.hpp"
 
+#include <GLFW/glfw3.h>
+#include <GLFW/glfw3native.h>
+
+#include "Core/Window.hpp"
+
 namespace RHI {
 
     namespace {
@@ -74,7 +79,8 @@ namespace RHI {
 
     }
 
-    Instance::Instance()
+    Instance::Instance(const std::shared_ptr<Window>& window)
+        : m_Window(window)
     {
         VK_CHECK(volkInitialize());
 
@@ -107,7 +113,7 @@ namespace RHI {
         };
 
         std::vector<const char*> layers;
-        std::vector<const char*> extensions;
+        std::vector<const char*> extensions = Window::GetRequiredVulkanExtensions();
 
 #ifndef NDEBUG
         layers.push_back("VK_LAYER_KHRONOS_validation");
@@ -135,10 +141,13 @@ namespace RHI {
 #ifndef NDEBUG
         VK_CHECK(vkCreateDebugUtilsMessengerEXT(m_Instance, &messengerInfo, nullptr, &m_DebugMessenger));
 #endif
+
+        VK_CHECK(glfwCreateWindowSurface(m_Instance, m_Window->GetNative(), nullptr, &m_Surface));
     }
 
     Instance::~Instance()
     {
+        vkDestroySurfaceKHR(m_Instance, m_Surface, nullptr);
 #ifndef NDEBUG
         vkDestroyDebugUtilsMessengerEXT(m_Instance, m_DebugMessenger, nullptr);
 #endif
