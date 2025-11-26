@@ -23,6 +23,7 @@ add_subdirectory(thirdparty/volk)
 add_subdirectory(thirdparty/vma)
 add_subdirectory(thirdparty/glm)
 add_subdirectory(thirdparty/tinygltf)
+add_subdirectory(thirdparty/glfw)
 
 # set(ASSET_FOLDER ${CMAKE_CURRENT_SOURCE_DIR}/assets)
 file(TO_CMAKE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/assets ASSET_FOLDER)
@@ -78,6 +79,7 @@ PRIVATE
     VulkanMemoryAllocator
     glm
     tinygltf
+    glfw
 )
 
 target_compile_definitions(${PROJECT_NAME}
@@ -85,12 +87,20 @@ PRIVATE
     NOMINMAX
     GLM_ENABLE_EXPERIMENTAL
     TINYGLTF_NOEXCEPTION
+    GLFW_INCLUDE_NONE
 )
 
 target_precompile_headers(${PROJECT_NAME}
 PRIVATE
     src/PCH.hpp
 )
+
+if(WIN32)
+    target_compile_definitions(${PROJECT_NAME}
+    PRIVATE
+        GLFW_EXPOSE_NATIVE_WIN32
+    )
+endif()
 
 if(NOT MSVC)
     target_compile_options(${PROJECT_NAME}
