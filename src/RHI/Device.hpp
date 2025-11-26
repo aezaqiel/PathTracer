@@ -169,8 +169,8 @@ namespace RHI {
         void CreateDevice();
         void CreateSyncObjects();
 
-        static i32 ScorePhysicalDevice(VkPhysicalDevice device);
-        static QueueFamilyIndices FindQueueFamilyIndices(VkPhysicalDevice device);
+        i32 ScorePhysicalDevice(VkPhysicalDevice device);
+        QueueFamilyIndices FindQueueFamilyIndices(VkPhysicalDevice device);
 
     private:
         inline static constexpr usize s_FrameInFlight { 3 };

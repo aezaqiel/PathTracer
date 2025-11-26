@@ -242,7 +242,10 @@ namespace RHI {
         for (u32 i = 0; i < familyCount; ++i) {
             const auto& family = availableFamilies.at(i);
 
-            if (family.queueFlags & VK_QUEUE_GRAPHICS_BIT) {
+            VkBool32 present = VK_FALSE;
+            vkGetPhysicalDeviceSurfaceSupportKHR(device, i, m_Instance->GetSurface(), &present);
+
+            if ((family.queueFlags & VK_QUEUE_GRAPHICS_BIT) && present == VK_TRUE) {
                 if (!indices.graphics.has_value()) {
                     indices.graphics = i;
                 }
