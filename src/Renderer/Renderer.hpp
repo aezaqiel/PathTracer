@@ -3,7 +3,7 @@
 #include "RHI/Instance.hpp"
 #include "RHI/Device.hpp"
 #include "RHI/Swapchain.hpp"
-#include "RHI/CommandManager.hpp"
+#include "RHI/CommandContext.hpp"
 #include "RHI/Buffer.hpp"
 #include "RHI/Image.hpp"
 #include "RHI/AccelerationStructure.hpp"
@@ -28,9 +28,9 @@ private:
     std::shared_ptr<RHI::Device> m_Device;
     std::unique_ptr<RHI::Swapchain> m_Swapchain;
 
-    std::unique_ptr<RHI::CommandManager<RHI::QueueType::Graphics>> m_Graphics;
-    std::unique_ptr<RHI::CommandManager<RHI::QueueType::Compute>> m_Compute;
-    std::unique_ptr<RHI::CommandManager<RHI::QueueType::Transfer>> m_Transfer;
+    std::unique_ptr<RHI::CommandContext<RHI::QueueType::Graphics>> m_Graphics;
+    std::unique_ptr<RHI::CommandContext<RHI::QueueType::Compute>> m_Compute;
+    std::unique_ptr<RHI::CommandContext<RHI::QueueType::Transfer>> m_Transfer;
 
     std::unique_ptr<RHI::Buffer> m_VertexBuffer;
     std::unique_ptr<RHI::Buffer> m_IndexBuffer;

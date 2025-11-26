@@ -14,9 +14,9 @@ Renderer::Renderer(const std::shared_ptr<Window>& window)
     m_Swapchain = std::make_unique<RHI::Swapchain>(m_Instance, m_Device);
     m_Swapchain->Create(window->GetWidth(), window->GetHeight());
 
-    m_Graphics = std::make_unique<RHI::CommandManager<RHI::QueueType::Graphics>>(m_Device);
-    m_Compute = std::make_unique<RHI::CommandManager<RHI::QueueType::Compute>>(m_Device);
-    m_Transfer = std::make_unique<RHI::CommandManager<RHI::QueueType::Transfer>>(m_Device);
+    m_Graphics = std::make_unique<RHI::CommandContext<RHI::QueueType::Graphics>>(m_Device);
+    m_Compute = std::make_unique<RHI::CommandContext<RHI::QueueType::Compute>>(m_Device);
+    m_Transfer = std::make_unique<RHI::CommandContext<RHI::QueueType::Transfer>>(m_Device);
 
     std::filesystem::path assetPath = PathConfig::ASSET_DIR;
     auto model = Scene::GlTFLoader::Load(assetPath / "Suzanne.glb");
@@ -81,10 +81,102 @@ Renderer::Renderer(const std::shared_ptr<Window>& window)
 
 Renderer::~Renderer()
 {
+    m_Device->WaitIdle();
 }
 
 void Renderer::Draw()
 {
+    m_Device->SyncFrame();
+
+    if (auto result = m_Swapchain->AcquireNextImage()) {
+        if (*result == VK_ERROR_OUT_OF_DATE_KHR) RecreateSwapchain();
+    }
+
+    VkCommandBuffer computeCmd = m_Compute->Record([&](VkCommandBuffer cmd) {
+    });
+
+    VkCommandBuffer graphicsCmd = m_Graphics->Record([&](VkCommandBuffer cmd) {
+        VkImageMemoryBarrier2 preRenderBarrier {
+            .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
+            .srcStageMask = VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT,
+            .srcAccessMask = 0,
+            .dstStageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
+            .dstAccessMask = VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
+            .oldLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+            .newLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+            .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+            .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+            .image = m_Swapchain->GetCurrentImage(),
+            .subresourceRange = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1 }
+        };
+
+        VkDependencyInfo preRenderDependency {
+            .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
+            .imageMemoryBarrierCount = 1,
+            .pImageMemoryBarriers = &preRenderBarrier
+        };
+        vkCmdPipelineBarrier2(cmd, &preRenderDependency);
+
+        VkClearValue clearValue = {{{ 0.1f, 0.1f, 0.1f, 1.0f }}};
+
+        VkRenderingAttachmentInfo colorAttachment {
+            .sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
+            .imageView = m_Swapchain->GetCurrentImageView(),
+            .imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+            .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
+            .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
+            .clearValue = clearValue
+        };
+
+        VkRenderingInfo renderingInfo {
+            .sType = VK_STRUCTURE_TYPE_RENDERING_INFO,
+            .renderArea = { { 0, 0 }, m_Swapchain->GetExtent() },
+            .layerCount = 1,
+            .colorAttachmentCount = 1,
+            .pColorAttachments = &colorAttachment
+        };
+
+        vkCmdBeginRendering(cmd, &renderingInfo);
+        vkCmdEndRendering(cmd);
+
+        VkImageMemoryBarrier2 postRenderBarrier {
+            .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
+            .srcStageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
+            .srcAccessMask = VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
+            .dstStageMask = VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT,
+            .dstAccessMask = 0,
+            .oldLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+            .newLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
+            .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+            .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+            .image = m_Swapchain->GetCurrentImage(),
+            .subresourceRange = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1 }
+        };
+
+        VkDependencyInfo postRenderDependency {
+            .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
+            .imageMemoryBarrierCount = 1,
+            .pImageMemoryBarriers = &postRenderBarrier
+        };
+        vkCmdPipelineBarrier2(cmd, &postRenderDependency);
+    });
+
+    VkSemaphoreSubmitInfo computeSignal = m_Device->Submit<RHI::QueueType::Compute>(computeCmd, {}, {});
+
+    std::vector<VkSemaphoreSubmitInfo> graphicsWait {
+        computeSignal,
+        m_Swapchain->GetAcquireWaitInfo()
+    };
+
+    std::vector<VkSemaphoreSubmitInfo> graphicsSignal {
+        m_Swapchain->GetPresentSignalInfo()
+    };
+
+    m_Device->Submit<RHI::QueueType::Graphics>(graphicsCmd, graphicsWait, graphicsSignal);
+
+    if (auto result = m_Swapchain->Present()) {
+        if (*result == VK_ERROR_OUT_OF_DATE_KHR) RecreateSwapchain();
+    }
 }
 
 void Renderer::RecreateSwapchain() const

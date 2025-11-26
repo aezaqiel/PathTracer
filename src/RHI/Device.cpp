@@ -9,14 +9,40 @@ namespace RHI {
     {
         SelectPhysicalDevice();
         CreateDevice();
+        CreateSyncObjects();
     }
 
     Device::~Device()
     {
-        vkDeviceWaitIdle(m_Device);
+        WaitIdle();
+
+        vkDestroySemaphore(m_Device, m_TransferTimeline, nullptr);
+        vkDestroySemaphore(m_Device, m_ComputeTimeline, nullptr);
+        vkDestroySemaphore(m_Device, m_GraphicsTimeline, nullptr);
 
         vmaDestroyAllocator(m_Allocator);
         vkDestroyDevice(m_Device, nullptr);
+    }
+
+    void Device::SyncFrame()
+    {
+        m_HostFrameIndex += 1;
+
+        vkGetSemaphoreCounterValue(m_Device, m_GraphicsTimeline, &m_LocalFrameIndex);
+        if (m_HostFrameIndex > m_LocalFrameIndex + s_FrameInFlight) {
+            u64 wait = m_HostFrameIndex - s_FrameInFlight;
+            VkSemaphoreWaitInfo waitInfo {
+                .sType = VK_STRUCTURE_TYPE_SEMAPHORE_WAIT_INFO,
+                .pNext = nullptr,
+                .flags = 0,
+                .semaphoreCount = 1,
+                .pSemaphores = &m_GraphicsTimeline,
+                .pValues = &wait
+            };
+            VK_CHECK(vkWaitSemaphores(m_Device, &waitInfo, std::numeric_limits<u64>::max()));
+        }
+
+        m_CurrentFrameIndex = m_HostFrameIndex % s_FrameInFlight;
     }
 
     void Device::SelectPhysicalDevice()
@@ -166,6 +192,26 @@ namespace RHI {
         vkGetDeviceQueue(m_Device, GetQueueFamily<QueueType::Graphics>(), 0, &m_GraphicsQueue);
         vkGetDeviceQueue(m_Device, GetQueueFamily<QueueType::Compute>(), 0, &m_ComputeQueue);
         vkGetDeviceQueue(m_Device, GetQueueFamily<QueueType::Transfer>(), 0, &m_TransferQueue);
+    }
+
+    void Device::CreateSyncObjects()
+    {
+        VkSemaphoreTypeCreateInfo typeInfo {
+            .sType = VK_STRUCTURE_TYPE_SEMAPHORE_TYPE_CREATE_INFO,
+            .pNext = nullptr,
+            .semaphoreType = VK_SEMAPHORE_TYPE_TIMELINE,
+            .initialValue = 0
+        };
+
+        VkSemaphoreCreateInfo semaphoreInfo {
+            .sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO,
+            .pNext = &typeInfo,
+            .flags = 0
+        };
+
+        VK_CHECK(vkCreateSemaphore(m_Device, &semaphoreInfo, nullptr, &m_GraphicsTimeline));
+        VK_CHECK(vkCreateSemaphore(m_Device, &semaphoreInfo, nullptr, &m_ComputeTimeline));
+        VK_CHECK(vkCreateSemaphore(m_Device, &semaphoreInfo, nullptr, &m_TransferTimeline));
     }
 
     // TODO: Currently only look for discrete gpu (need to check for feature support)

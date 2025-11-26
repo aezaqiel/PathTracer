@@ -3,7 +3,7 @@
 #include <glm/glm.hpp>
 
 #include "VkTypes.hpp"
-#include "CommandManager.hpp"
+#include "CommandContext.hpp"
 
 namespace RHI {
 
@@ -55,7 +55,7 @@ namespace RHI {
         };
 
     public:
-        BLAS(const std::shared_ptr<Device>& device, CommandManager<QueueType::Compute>& queue, const std::span<Geometry>& geometries);
+        BLAS(const std::shared_ptr<Device>& device, CommandContext<QueueType::Compute>& queue, const std::span<Geometry>& geometries);
         virtual ~BLAS() = default;
     };
 
@@ -73,7 +73,7 @@ namespace RHI {
         };
 
     public:
-        TLAS(const std::shared_ptr<Device>& device, CommandManager<QueueType::Compute>& queue, const std::span<Instance>& instances);
+        TLAS(const std::shared_ptr<Device>& device, CommandContext<QueueType::Compute>& queue, const std::span<Instance>& instances);
         virtual ~TLAS() = default;
     };
 

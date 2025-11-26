@@ -27,7 +27,7 @@ namespace RHI {
         vkDestroyAccelerationStructureKHR(m_Device->GetDevice(), m_AS, nullptr);
     }
 
-    BLAS::BLAS(const std::shared_ptr<Device>& device, CommandManager<QueueType::Compute>& queue, const std::span<Geometry>& geometries)
+    BLAS::BLAS(const std::shared_ptr<Device>& device, CommandContext<QueueType::Compute>& queue, const std::span<Geometry>& geometries)
         : AccelerationStructure(device)
     {
         std::vector<VkAccelerationStructureGeometryKHR> vkGeometries;
@@ -121,7 +121,7 @@ namespace RHI {
         buildInfo.dstAccelerationStructure = m_AS;
         buildInfo.scratchData.deviceAddress = scratch.GetDeviceAddress();
 
-        queue.Record([&](VkCommandBuffer cmd) {
+        VkCommandBuffer cmdBuffer = queue.Record([&](VkCommandBuffer cmd) {
             const VkAccelerationStructureBuildRangeInfoKHR* pRanges = ranges.data();
             vkCmdBuildAccelerationStructuresKHR(cmd, 1, &buildInfo, &pRanges);
 
@@ -149,8 +149,8 @@ namespace RHI {
             vkCmdPipelineBarrier2(cmd, &dependency);
         });
 
-        queue.Submit({}, {});
-        queue.Sync();
+        m_Device->Submit<QueueType::Compute>(cmdBuffer, {}, {});
+        m_Device->SyncTimeline<QueueType::Compute>();
 
         VkAccelerationStructureDeviceAddressInfoKHR addressInfo {
             .sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_DEVICE_ADDRESS_INFO_KHR,
@@ -161,7 +161,7 @@ namespace RHI {
         m_Address = vkGetAccelerationStructureDeviceAddressKHR(m_Device->GetDevice(), &addressInfo);
     }
 
-    TLAS::TLAS(const std::shared_ptr<Device>& device, CommandManager<QueueType::Compute>& queue, const std::span<Instance>& instances)
+    TLAS::TLAS(const std::shared_ptr<Device>& device, CommandContext<QueueType::Compute>& queue, const std::span<Instance>& instances)
         : AccelerationStructure(device)
     {
         std::vector<VkAccelerationStructureInstanceKHR> vkInstances;
@@ -192,7 +192,7 @@ namespace RHI {
         });
         staging.Write(vkInstances.data(), instanceBufferSize);
 
-        queue.Record([&](VkCommandBuffer cmd) {
+        VkCommandBuffer cmdBuffer = queue.Record([&](VkCommandBuffer cmd) {
             VkBufferCopy copyRegion {
                 .srcOffset = 0,
                 .dstOffset = 0,
@@ -225,8 +225,8 @@ namespace RHI {
             vkCmdPipelineBarrier2(cmd, &dependency);
         });
 
-        queue.Submit({}, {});
-        queue.Sync();
+        m_Device->Submit<QueueType::Compute>(cmdBuffer, {}, {});
+        m_Device->SyncTimeline<QueueType::Compute>();
 
         VkAccelerationStructureGeometryKHR geometry {
             .sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_KHR,
@@ -305,12 +305,12 @@ namespace RHI {
         };
         const VkAccelerationStructureBuildRangeInfoKHR* pRange = &rangeInfo;
 
-        queue.Record([&](VkCommandBuffer cmd) {
+        cmdBuffer = queue.Record([&](VkCommandBuffer cmd) {
             vkCmdBuildAccelerationStructuresKHR(cmd, 1, &buildInfo, &pRange);
         });
 
-        queue.Submit({}, {});
-        queue.Sync();
+        m_Device->Submit<QueueType::Compute>(cmdBuffer, {}, {});
+        m_Device->SyncTimeline<QueueType::Compute>();
 
         VkAccelerationStructureDeviceAddressInfoKHR addressInfo {
             .sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_DEVICE_ADDRESS_INFO_KHR,
