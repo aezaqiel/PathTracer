@@ -2,6 +2,7 @@
 
 #include "RHI/Instance.hpp"
 #include "RHI/Device.hpp"
+#include "RHI/Swapchain.hpp"
 #include "RHI/CommandManager.hpp"
 #include "RHI/Buffer.hpp"
 #include "RHI/Image.hpp"
@@ -18,10 +19,14 @@ public:
     void Draw();
 
 private:
+    void RecreateSwapchain() const;
+
+private:
     std::shared_ptr<Window> m_Window;
 
     std::shared_ptr<RHI::Instance> m_Instance;
     std::shared_ptr<RHI::Device> m_Device;
+    std::unique_ptr<RHI::Swapchain> m_Swapchain;
 
     std::unique_ptr<RHI::CommandManager<RHI::QueueType::Graphics>> m_Graphics;
     std::unique_ptr<RHI::CommandManager<RHI::QueueType::Compute>> m_Compute;

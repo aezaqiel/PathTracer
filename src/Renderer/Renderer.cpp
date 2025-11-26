@@ -11,6 +11,9 @@ Renderer::Renderer(const std::shared_ptr<Window>& window)
     m_Instance = std::make_shared<RHI::Instance>(window);
     m_Device = std::make_shared<RHI::Device>(m_Instance);
 
+    m_Swapchain = std::make_unique<RHI::Swapchain>(m_Instance, m_Device);
+    m_Swapchain->Create(window->GetWidth(), window->GetHeight());
+
     m_Graphics = std::make_unique<RHI::CommandManager<RHI::QueueType::Graphics>>(m_Device);
     m_Compute = std::make_unique<RHI::CommandManager<RHI::QueueType::Compute>>(m_Device);
     m_Transfer = std::make_unique<RHI::CommandManager<RHI::QueueType::Transfer>>(m_Device);
@@ -82,4 +85,10 @@ Renderer::~Renderer()
 
 void Renderer::Draw()
 {
+}
+
+void Renderer::RecreateSwapchain() const
+{
+    m_Device->WaitIdle();
+    m_Swapchain->Create(m_Window->GetWidth(), m_Window->GetHeight());
 }

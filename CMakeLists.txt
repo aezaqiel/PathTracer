@@ -54,6 +54,8 @@ add_executable(${PROJECT_NAME}
     src/RHI/Instance.cpp
     src/RHI/Device.hpp
     src/RHI/Device.cpp
+    src/RHI/Swapchain.hpp
+    src/RHI/Swapchain.cpp
     src/RHI/CommandManager.hpp
     src/RHI/Image.hpp
     src/RHI/Image.cpp
