@@ -1,6 +1,7 @@
 #include "Application.hpp"
 
 #include "Window.hpp"
+#include "Input.hpp"
 
 #include "RHI/Instance.hpp"
 #include "RHI/Device.hpp"
@@ -105,6 +106,11 @@ void Application::Run()
 {
     while (m_Running) {
         Window::PollEvents();
+        Input::Update();
+
+        if (Input::IsKeyDown(KeyCode::Escape)) {
+            m_Running = false;
+        }
 
         if (!m_Minimized) {
         }
@@ -123,4 +129,6 @@ void Application::DispatchEvents(const Event& event)
     dispatcher.Dispatch<WindowMinimizeEvent>([&](const WindowMinimizeEvent& e) {
         m_Minimized = e.minimized;
     });
+
+    Input::OnEvent(event);
 }

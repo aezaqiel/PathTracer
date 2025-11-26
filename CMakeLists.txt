@@ -42,8 +42,12 @@ add_executable(${PROJECT_NAME}
     src/Core/Application.cpp
     src/Core/Logger.hpp
     src/Core/Logger.cpp
+    src/Core/KeyCodes.hpp
+    src/Core/Events.hpp
     src/Core/Window.hpp
     src/Core/Window.cpp
+    src/Core/Input.hpp
+    src/Core/Input.cpp
 
     src/RHI/VkTypes.hpp
     src/RHI/Instance.hpp
