@@ -1,8 +1,5 @@
 #pragma once
 
-#include <optional>
-#include <filesystem>
-
 #include "Scene/SceneData.hpp"
 
 namespace tinygltf {

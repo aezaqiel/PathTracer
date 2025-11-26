@@ -1,7 +1,5 @@
 #include "Instance.hpp"
 
-#include "Types.hpp"
-
 namespace RHI {
 
     namespace {

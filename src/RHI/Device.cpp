@@ -1,7 +1,5 @@
 #include "Device.hpp"
 
-#include <map>
-
 #include "Instance.hpp"
 
 namespace RHI {

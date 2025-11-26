@@ -1,6 +1,5 @@
 #pragma once
 
-#include <memory>
 #include "VkTypes.hpp"
 
 namespace RHI {

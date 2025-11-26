@@ -3,8 +3,6 @@
 #include <tiny_gltf.h>
 #include <glm/gtc/type_ptr.hpp>
 
-#include "Logger.hpp"
-
 namespace Scene {
 
     std::optional<Scene::SceneData> GlTFLoader::Load(const std::filesystem::path& path)

@@ -2,8 +2,6 @@
 
 #include <glm/glm.hpp>
 
-#include "Types.hpp"
-
 namespace Scene {
 
     struct Vertex

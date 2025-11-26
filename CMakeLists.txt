@@ -36,8 +36,9 @@ configure_file(
 add_executable(${PROJECT_NAME}
     src/Main.cpp
     src/Types.hpp
-    src/Logger.hpp
-    src/Logger.cpp
+
+    src/Core/Logger.hpp
+    src/Core/Logger.cpp
 
     src/RHI/VkTypes.hpp
     src/RHI/Instance.hpp
@@ -82,6 +83,11 @@ PRIVATE
     NOMINMAX
     GLM_ENABLE_EXPERIMENTAL
     TINYGLTF_NOEXCEPTION
+)
+
+target_precompile_headers(${PROJECT_NAME}
+PRIVATE
+    src/PCH.hpp
 )
 
 if(NOT MSVC)

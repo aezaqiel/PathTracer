@@ -5,8 +5,6 @@
 
 #ifndef NDEBUG
 
-    #include "Logger.hpp"
-
     namespace {
 
         inline static const char* VkResultToString(VkResult result)
