@@ -18,6 +18,8 @@ Renderer::Renderer(const std::shared_ptr<Window>& window)
     m_Compute = std::make_unique<RHI::CommandContext<RHI::QueueType::Compute>>(m_Device);
     m_Transfer = std::make_unique<RHI::CommandContext<RHI::QueueType::Transfer>>(m_Device);
 
+    m_DescriptorManager = std::make_unique<RHI::DescriptorManager>(m_Device);
+
     std::filesystem::path assetPath = PathConfig::ASSET_DIR;
     auto model = Scene::GlTFLoader::Load(assetPath / "Suzanne.glb");
 

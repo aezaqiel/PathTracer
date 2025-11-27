@@ -7,6 +7,7 @@
 #include "RHI/Buffer.hpp"
 #include "RHI/Image.hpp"
 #include "RHI/AccelerationStructure.hpp"
+#include "RHI/DescriptorManager.hpp"
 
 class Window;
 
@@ -31,6 +32,8 @@ private:
     std::unique_ptr<RHI::CommandContext<RHI::QueueType::Graphics>> m_Graphics;
     std::unique_ptr<RHI::CommandContext<RHI::QueueType::Compute>> m_Compute;
     std::unique_ptr<RHI::CommandContext<RHI::QueueType::Transfer>> m_Transfer;
+
+    std::unique_ptr<RHI::DescriptorManager> m_DescriptorManager;
 
     std::unique_ptr<RHI::Buffer> m_VertexBuffer;
     std::unique_ptr<RHI::Buffer> m_IndexBuffer;

@@ -65,6 +65,8 @@ add_executable(${PROJECT_NAME}
     src/RHI/AccelerationStructure.cpp
     src/RHI/Shader.hpp
     src/RHI/Shader.cpp
+    src/RHI/DescriptorManager.hpp
+    src/RHI/DescriptorManager.cpp
 
     src/Scene/SceneData.hpp
     src/Scene/SceneLoader.hpp
