@@ -18,9 +18,24 @@ Renderer::Renderer(const std::shared_ptr<Window>& window)
     m_Compute = std::make_unique<RHI::CommandContext<RHI::QueueType::Compute>>(m_Device);
     m_Transfer = std::make_unique<RHI::CommandContext<RHI::QueueType::Transfer>>(m_Device);
 
-    m_DescriptorManager = std::make_unique<RHI::DescriptorManager>(m_Device);
+    m_DescriptorManager = std::make_shared<RHI::DescriptorManager>(m_Device);
 
-    std::filesystem::path assetPath = PathConfig::ASSET_DIR;
+    std::filesystem::path shaderPath = PathConfig::ShaderDir;
+
+    std::vector<VkFormat> colorFormats = { m_Swapchain->GetFormat() };
+
+    m_GraphicsPipeline = RHI::GraphicsPipelineBuilder(m_Device, m_DescriptorManager)
+        .SetVertexShader(shaderPath / "triangle.vert.spv")
+        .SetFragmentShader(shaderPath / "triangle.frag.spv")
+        .SetColorFormats(colorFormats)
+        .SetDepthTest(false, false)
+        .SetDepthFormat(VK_FORMAT_UNDEFINED)
+        .SetInputTopology(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST)
+        .SetPolygonMode(VK_POLYGON_MODE_FILL)
+        .SetCullMode(VK_CULL_MODE_BACK_BIT, VK_FRONT_FACE_CLOCKWISE)
+        .Build();
+
+    std::filesystem::path assetPath = PathConfig::AssetDir;
     auto model = Scene::GlTFLoader::Load(assetPath / "Suzanne.glb");
 
     m_VertexBuffer = std::make_unique<RHI::Buffer>(m_Device, RHI::Buffer::Spec {
@@ -119,7 +134,7 @@ void Renderer::Draw()
         };
         vkCmdPipelineBarrier2(cmd, &preRenderDependency);
 
-        VkClearValue clearValue = {{{ 0.1f, 0.1f, 0.1f, 1.0f }}};
+        VkClearValue clearValue = {{{ 0.8f, 0.2f, 0.8f, 1.0f }}};
 
         VkRenderingAttachmentInfo colorAttachment {
             .sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
@@ -139,6 +154,24 @@ void Renderer::Draw()
         };
 
         vkCmdBeginRendering(cmd, &renderingInfo);
+
+        m_GraphicsPipeline->Bind(cmd);
+
+        m_GraphicsPipeline->SetViewport(cmd, VkViewport {
+            .x = 0.0f, .y = 0.0f,
+            .width = static_cast<f32>(m_Swapchain->GetExtent().width),
+            .height = static_cast<f32>(m_Swapchain->GetExtent().height),
+            .minDepth = 0.0f,
+            .maxDepth = 1.0f
+        });
+
+        m_GraphicsPipeline->SetScissor(cmd, VkRect2D {
+            .offset = VkOffset2D { 0, 0 },
+            .extent = m_Swapchain->GetExtent()
+        });
+
+        vkCmdDraw(cmd, 6, 1, 0, 0);
+
         vkCmdEndRendering(cmd);
 
         VkImageMemoryBarrier2 postRenderBarrier {

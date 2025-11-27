@@ -30,8 +30,8 @@ namespace RHI {
 
     }
 
-    Shader::Shader(const std::shared_ptr<Device>& device, const std::filesystem::path& path, Stage stage, const std::string& entry)
-        : m_Device(device), m_Stage(stage), m_EntryPoint(entry)
+    Shader::Shader(const std::shared_ptr<Device>& device, const std::filesystem::path& path, Stage stage)
+        : m_Device(device), m_Stage(stage)
     {
         auto src = ReadFile(path);
 

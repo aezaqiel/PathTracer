@@ -4,6 +4,7 @@
 
 namespace PathConfig {
 
-    inline constexpr std::string_view ASSET_DIR = "@ASSET_FOLDER@";
+    inline constexpr std::string_view AssetDir = "@ASSET_FOLDER@";
+    inline constexpr std::string_view ShaderDir = "@SHADER_FOLDER@";
 
 }

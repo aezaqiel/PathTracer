@@ -22,12 +22,11 @@ namespace RHI {
         };
 
     public:
-        Shader(const std::shared_ptr<Device>& device, const std::filesystem::path& path, Stage stage, const std::string& entry = "main");
+        Shader(const std::shared_ptr<Device>& device, const std::filesystem::path& path, Stage stage);
         ~Shader();
 
         inline VkShaderModule GetModule() const { return m_Module; }
         VkShaderStageFlagBits GetStage() const;
-        inline std::string GetEntryPoint() const { return m_EntryPoint; }
 
     private:
         static std::vector<char> ReadFile(const std::filesystem::path& path);
@@ -36,9 +35,7 @@ namespace RHI {
         std::shared_ptr<Device> m_Device;
 
         VkShaderModule m_Module { VK_NULL_HANDLE };
-
         Stage m_Stage;
-        std::string m_EntryPoint;
     };
 
 }

@@ -11,10 +11,13 @@ namespace RHI {
         std::vector<VkDescriptorSetLayoutBinding> bindings;
         std::vector<VkDescriptorBindingFlags> flags;
 
-        DescriptorLayoutBuilder() = default;
+        DescriptorLayoutBuilder(const std::shared_ptr<Device>& device);
 
         DescriptorLayoutBuilder& AddBinding(u32 binding, VkDescriptorType type, u32 count, VkShaderStageFlags stage, VkDescriptorBindingFlags flag = 0);
-        VkDescriptorSetLayout Build(VkDevice device, VkShaderStageFlags stage = 0);
+        VkDescriptorSetLayout Build();
+    
+    private:
+        std::shared_ptr<Device> m_Device;
     };
 
     class DescriptorManager

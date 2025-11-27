@@ -4,6 +4,11 @@
 
 namespace RHI {
 
+    DescriptorLayoutBuilder::DescriptorLayoutBuilder(const std::shared_ptr<Device>& device)
+        : m_Device(device)
+    {
+    }
+
     DescriptorLayoutBuilder& DescriptorLayoutBuilder::AddBinding(u32 binding, VkDescriptorType type, u32 count, VkShaderStageFlags stage, VkDescriptorBindingFlags flag)
     {
         bindings.push_back(VkDescriptorSetLayoutBinding {
@@ -18,7 +23,7 @@ namespace RHI {
         return *this;
     }
 
-    VkDescriptorSetLayout DescriptorLayoutBuilder::Build(VkDevice device, VkShaderStageFlags stage)
+    VkDescriptorSetLayout DescriptorLayoutBuilder::Build()
     {
         VkDescriptorSetLayoutBindingFlagsCreateInfo flagsInfo {
             .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_BINDING_FLAGS_CREATE_INFO,
@@ -36,7 +41,7 @@ namespace RHI {
         };
 
         VkDescriptorSetLayout layout = VK_NULL_HANDLE;
-        VK_CHECK(vkCreateDescriptorSetLayout(device, &info, nullptr, &layout));
+        VK_CHECK(vkCreateDescriptorSetLayout(m_Device->GetDevice(), &info, nullptr, &layout));
 
         return layout;
     }
@@ -148,10 +153,10 @@ namespace RHI {
 
     void DescriptorManager::InitLayout()
     {
-        m_Layout = DescriptorLayoutBuilder()
+        m_Layout = DescriptorLayoutBuilder(m_Device)
             .AddBinding(0, VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, s_MaxBindlessTextures, VK_SHADER_STAGE_ALL, VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT | VK_DESCRIPTOR_BINDING_UPDATE_AFTER_BIND_BIT)
             .AddBinding(1, VK_DESCRIPTOR_TYPE_SAMPLER, s_MaxBindlessSamplers, VK_SHADER_STAGE_ALL, VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT | VK_DESCRIPTOR_BINDING_UPDATE_AFTER_BIND_BIT)
-            .Build(m_Device->GetDevice());
+            .Build();
     }
 
     void DescriptorManager::InitPool()
