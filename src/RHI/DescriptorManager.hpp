@@ -34,6 +34,9 @@ namespace RHI {
 
         void Bind(VkCommandBuffer cmd, VkPipelineBindPoint bind, VkPipelineLayout layout, u32 index = 0);
 
+        void UpdateStorageImage(u32 binding, VkImageView view, VkImageLayout layout);
+        void UpdateTLAS(u32 binding, VkAccelerationStructureKHR tlas);
+
         VkDescriptorSetLayout GetLayout() const { return m_Layout; }
         VkDescriptorSet GetSet() const { return m_Set; }
 

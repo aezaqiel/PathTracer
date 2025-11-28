@@ -8,6 +8,9 @@
 Renderer::Renderer(const std::shared_ptr<Window>& window)
     : m_Window(window)
 {
+    std::filesystem::path shaderPath = PathConfig::ShaderDir;
+    std::filesystem::path assetPath = PathConfig::AssetDir;
+
     m_Instance = std::make_shared<RHI::Instance>(window);
     m_Device = std::make_shared<RHI::Device>(m_Instance);
 
@@ -20,22 +23,60 @@ Renderer::Renderer(const std::shared_ptr<Window>& window)
 
     m_DescriptorManager = std::make_shared<RHI::DescriptorManager>(m_Device);
 
-    std::filesystem::path shaderPath = PathConfig::ShaderDir;
-
     std::vector<VkFormat> colorFormats = { m_Swapchain->GetFormat() };
 
     m_GraphicsPipeline = RHI::GraphicsPipelineBuilder(m_Device, m_DescriptorManager)
-        .SetVertexShader(shaderPath / "triangle.vert.spv")
-        .SetFragmentShader(shaderPath / "triangle.frag.spv")
+        .SetVertexShader(shaderPath / "post.vert.spv")
+        .SetFragmentShader(shaderPath / "post.frag.spv")
         .SetColorFormats(colorFormats)
         .SetDepthTest(false, false)
         .SetDepthFormat(VK_FORMAT_UNDEFINED)
         .SetInputTopology(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST)
         .SetPolygonMode(VK_POLYGON_MODE_FILL)
-        .SetCullMode(VK_CULL_MODE_BACK_BIT, VK_FRONT_FACE_CLOCKWISE)
+        .SetCullMode(VK_CULL_MODE_NONE)
+        .AddPushConstant(sizeof(u32) * 2, VK_SHADER_STAGE_FRAGMENT_BIT)
         .Build();
 
-    std::filesystem::path assetPath = PathConfig::AssetDir;
+    m_RayTracingPipeline = RHI::RayTracingPipelineBuilder(m_Device, m_DescriptorManager)
+        .AddRayGenShader(shaderPath / "raygen.rgen.spv")
+        .AddMissShader(shaderPath / "miss.rmiss.spv")
+        .AddClosestHitShader(shaderPath / "closesthit.rchit.spv")
+        .Build();
+
+    m_StorageImage = std::make_unique<RHI::Image>(m_Device, RHI::Image::Spec {
+        .extent = { window->GetWidth(), window->GetHeight(), 1 },
+        .format = VK_FORMAT_R32G32B32A32_SFLOAT,
+        .usage = VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT,
+        .memory = VMA_MEMORY_USAGE_GPU_ONLY
+    });
+
+    m_DescriptorManager->UpdateStorageImage(2, m_StorageImage->GetView(), VK_IMAGE_LAYOUT_GENERAL);
+    m_StorageImageIndex = m_DescriptorManager->RegisterTexture(m_StorageImage->GetView(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+
+    VkSamplerCreateInfo samplerInfo {
+        .sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
+        .pNext = nullptr,
+        .flags = 0,
+        .magFilter = VK_FILTER_LINEAR,
+        .minFilter = VK_FILTER_LINEAR,
+        .mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR,
+        .addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT,
+        .addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT,
+        .addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT,
+        .mipLodBias = 0.0f,
+        .anisotropyEnable = VK_FALSE,
+        .maxAnisotropy = m_Device->GetProps().properties.limits.maxSamplerAnisotropy,
+        .compareEnable = VK_FALSE,
+        .compareOp = VK_COMPARE_OP_ALWAYS,
+        .minLod = 0.0f,
+        .maxLod = VK_LOD_CLAMP_NONE,
+        .borderColor = VK_BORDER_COLOR_INT_OPAQUE_BLACK,
+        .unnormalizedCoordinates = VK_FALSE
+    };
+    VK_CHECK(vkCreateSampler(m_Device->GetDevice(), &samplerInfo, nullptr, &m_StorageImageSampler));
+
+    m_StorageImageSamplerIndex = m_DescriptorManager->RegisterSampler(m_StorageImageSampler);
+
     auto model = Scene::GlTFLoader::Load(assetPath / "Suzanne.glb");
 
     m_VertexBuffer = std::make_unique<RHI::Buffer>(m_Device, RHI::Buffer::Spec {
@@ -94,11 +135,15 @@ Renderer::Renderer(const std::shared_ptr<Window>& window)
     }
 
     m_TLAS = std::make_unique<RHI::TLAS>(m_Device, *m_Compute, tlasInstances);
+
+    m_DescriptorManager->UpdateTLAS(3, m_TLAS->GetAS());
 }
 
 Renderer::~Renderer()
 {
     m_Device->WaitIdle();
+
+    vkDestroySampler(m_Device->GetDevice(), m_StorageImageSampler, nullptr);
 }
 
 void Renderer::Draw()
@@ -110,13 +155,67 @@ void Renderer::Draw()
     }
 
     VkCommandBuffer computeCmd = m_Compute->Record([&](VkCommandBuffer cmd) {
+        VkImageMemoryBarrier2 preRenderBarrier {
+            .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
+            .srcStageMask = VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT,
+            .srcAccessMask = VK_ACCESS_2_NONE,
+            .dstStageMask = VK_PIPELINE_STAGE_2_RAY_TRACING_SHADER_BIT_KHR,
+            .dstAccessMask = VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT,
+            .oldLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+            .newLayout = VK_IMAGE_LAYOUT_GENERAL,
+            .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+            .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+            .image = m_StorageImage->GetImage(),
+            .subresourceRange = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1 }
+        };
+
+        VkDependencyInfo preRenderDependency {
+            .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
+            .imageMemoryBarrierCount = 1,
+            .pImageMemoryBarriers = &preRenderBarrier
+        };
+
+        vkCmdPipelineBarrier2(cmd, &preRenderDependency);
+
+        m_RayTracingPipeline->Bind(cmd);
+        m_DescriptorManager->Bind(cmd, VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR, m_RayTracingPipeline->GetLayout());
+
+        auto rgen = m_RayTracingPipeline->GetRGenRegion();
+        auto miss = m_RayTracingPipeline->GetMissRegion();
+        auto hit = m_RayTracingPipeline->GetHitRegion();
+        auto call = m_RayTracingPipeline->GetCallRegion();
+
+        auto extent = m_StorageImage->GetExtent();
+        vkCmdTraceRaysKHR(cmd, &rgen, &miss, &hit, &call, extent.width, extent.height, extent.depth);
+
+        VkImageMemoryBarrier2 postRenderBarrier {
+            .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
+            .srcStageMask = VK_PIPELINE_STAGE_2_RAY_TRACING_SHADER_BIT_KHR,
+            .srcAccessMask = VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT,
+            .dstStageMask = VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT,
+            .dstAccessMask = VK_ACCESS_2_NONE,
+            .oldLayout = VK_IMAGE_LAYOUT_GENERAL,
+            .newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+            .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+            .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+            .image = m_StorageImage->GetImage(),
+            .subresourceRange = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1 }
+        };
+
+        VkDependencyInfo postRenderDependency {
+            .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
+            .imageMemoryBarrierCount = 1,
+            .pImageMemoryBarriers = &postRenderBarrier
+        };
+
+        vkCmdPipelineBarrier2(cmd, &postRenderDependency);
     });
 
     VkCommandBuffer graphicsCmd = m_Graphics->Record([&](VkCommandBuffer cmd) {
         VkImageMemoryBarrier2 preRenderBarrier {
             .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
             .srcStageMask = VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT,
-            .srcAccessMask = 0,
+            .srcAccessMask = VK_ACCESS_2_NONE,
             .dstStageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
             .dstAccessMask = VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
             .oldLayout = VK_IMAGE_LAYOUT_UNDEFINED,
@@ -132,6 +231,7 @@ void Renderer::Draw()
             .imageMemoryBarrierCount = 1,
             .pImageMemoryBarriers = &preRenderBarrier
         };
+
         vkCmdPipelineBarrier2(cmd, &preRenderDependency);
 
         VkClearValue clearValue = {{{ 0.8f, 0.2f, 0.8f, 1.0f }}};
@@ -156,6 +256,7 @@ void Renderer::Draw()
         vkCmdBeginRendering(cmd, &renderingInfo);
 
         m_GraphicsPipeline->Bind(cmd);
+        m_DescriptorManager->Bind(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, m_GraphicsPipeline->GetLayout());
 
         m_GraphicsPipeline->SetViewport(cmd, VkViewport {
             .x = 0.0f, .y = 0.0f,
@@ -170,7 +271,10 @@ void Renderer::Draw()
             .extent = m_Swapchain->GetExtent()
         });
 
-        vkCmdDraw(cmd, 6, 1, 0, 0);
+        vkCmdPushConstants(cmd, m_GraphicsPipeline->GetLayout(), VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(u32), &m_StorageImageIndex);
+        vkCmdPushConstants(cmd, m_GraphicsPipeline->GetLayout(), VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(u32), &m_StorageImageSamplerIndex);
+
+        vkCmdDraw(cmd, 3, 1, 0, 0);
 
         vkCmdEndRendering(cmd);
 
@@ -193,6 +297,7 @@ void Renderer::Draw()
             .imageMemoryBarrierCount = 1,
             .pImageMemoryBarriers = &postRenderBarrier
         };
+
         vkCmdPipelineBarrier2(cmd, &postRenderDependency);
     });
 

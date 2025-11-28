@@ -39,6 +39,12 @@ private:
     std::unique_ptr<RHI::GraphicsPipeline> m_GraphicsPipeline;
     std::unique_ptr<RHI::RayTracingPipelne> m_RayTracingPipeline;
 
+    std::unique_ptr<RHI::Image> m_StorageImage;
+    u32 m_StorageImageIndex { 0 };
+
+    VkSampler m_StorageImageSampler { VK_NULL_HANDLE };
+    u32 m_StorageImageSamplerIndex { 0 };
+
     std::unique_ptr<RHI::Buffer> m_VertexBuffer;
     std::unique_ptr<RHI::Buffer> m_IndexBuffer;
 

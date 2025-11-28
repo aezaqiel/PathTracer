@@ -151,11 +151,62 @@ namespace RHI {
         vkCmdBindDescriptorSets(cmd, bind, layout, index, 1, &m_Set, 0, nullptr);
     }
 
+    void DescriptorManager::UpdateStorageImage(u32 binding, VkImageView view, VkImageLayout layout)
+    {
+        VkDescriptorImageInfo imageInfo {
+            .sampler = VK_NULL_HANDLE,
+            .imageView = view,
+            .imageLayout = layout
+        };
+
+        VkWriteDescriptorSet write {
+            .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+            .pNext = nullptr,
+            .dstSet = m_Set,
+            .dstBinding = binding,
+            .dstArrayElement = 0,
+            .descriptorCount = 1,
+            .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
+            .pImageInfo = &imageInfo,
+            .pBufferInfo = nullptr,
+            .pTexelBufferView = nullptr
+        };
+
+        vkUpdateDescriptorSets(m_Device->GetDevice(), 1, &write, 0, nullptr);
+    }
+
+    void DescriptorManager::UpdateTLAS(u32 binding, VkAccelerationStructureKHR tlas)
+    {
+        VkWriteDescriptorSetAccelerationStructureKHR asInfo {
+            .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET_ACCELERATION_STRUCTURE_KHR,
+            .pNext = nullptr,
+            .accelerationStructureCount = 1,
+            .pAccelerationStructures = &tlas
+        };
+
+        VkWriteDescriptorSet write {
+            .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+            .pNext = &asInfo,
+            .dstSet = m_Set,
+            .dstBinding = binding,
+            .dstArrayElement = 0,
+            .descriptorCount = 1,
+            .descriptorType = VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR,
+            .pImageInfo = nullptr,
+            .pBufferInfo = nullptr,
+            .pTexelBufferView = nullptr
+        };
+
+        vkUpdateDescriptorSets(m_Device->GetDevice(), 1, &write, 0, nullptr);
+    }
+
     void DescriptorManager::InitLayout()
     {
         m_Layout = DescriptorLayoutBuilder(m_Device)
             .AddBinding(0, VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, s_MaxBindlessTextures, VK_SHADER_STAGE_ALL, VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT | VK_DESCRIPTOR_BINDING_UPDATE_AFTER_BIND_BIT)
             .AddBinding(1, VK_DESCRIPTOR_TYPE_SAMPLER, s_MaxBindlessSamplers, VK_SHADER_STAGE_ALL, VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT | VK_DESCRIPTOR_BINDING_UPDATE_AFTER_BIND_BIT)
+            .AddBinding(2, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1, VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_COMPUTE_BIT)
+            .AddBinding(3, VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR, 1, VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR)
             .Build();
     }
 
@@ -163,7 +214,9 @@ namespace RHI {
     {
         std::vector<VkDescriptorPoolSize> sizes = {
             { VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, s_MaxBindlessTextures },
-            { VK_DESCRIPTOR_TYPE_SAMPLER, s_MaxBindlessSamplers }
+            { VK_DESCRIPTOR_TYPE_SAMPLER, s_MaxBindlessSamplers },
+            { VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1 },
+            { VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR, 1 }
         };
 
         VkDescriptorPoolCreateInfo poolInfo {
