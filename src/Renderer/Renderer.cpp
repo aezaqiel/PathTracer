@@ -17,11 +17,14 @@ Renderer::Renderer(const std::shared_ptr<Window>& window)
     m_Swapchain = std::make_unique<RHI::Swapchain>(m_Instance, m_Device);
     m_Swapchain->Create(window->GetWidth(), window->GetHeight());
 
-    m_Graphics = std::make_unique<RHI::CommandContext<RHI::QueueType::Graphics>>(m_Device);
-    m_Compute = std::make_unique<RHI::CommandContext<RHI::QueueType::Compute>>(m_Device);
-    m_Transfer = std::make_unique<RHI::CommandContext<RHI::QueueType::Transfer>>(m_Device);
+    m_GraphicsCommand = std::make_unique<RHI::CommandContext<RHI::QueueType::Graphics>>(m_Device);
+    m_ComputeCommand = std::make_unique<RHI::CommandContext<RHI::QueueType::Compute>>(m_Device);
+    m_TransferCommand = std::make_unique<RHI::CommandContext<RHI::QueueType::Transfer>>(m_Device);
 
     m_DescriptorManager = std::make_shared<RHI::DescriptorManager>(m_Device);
+    for (auto& allocator : m_DescriptorAllocators) {
+        allocator = std::make_unique<RHI::DescriptorAllocator>(m_Device);
+    }
 
     std::vector<VkFormat> colorFormats = { m_Swapchain->GetFormat() };
 
@@ -117,7 +120,7 @@ Renderer::Renderer(const std::shared_ptr<Window>& window)
             });
         }
 
-        m_BLASes.push_back(std::make_unique<RHI::BLAS>(m_Device, *m_Compute, geometries));
+        m_BLASes.push_back(std::make_unique<RHI::BLAS>(m_Device, *m_ComputeCommand, geometries));
     }
 
     std::vector<RHI::TLAS::Instance> tlasInstances;
@@ -134,7 +137,7 @@ Renderer::Renderer(const std::shared_ptr<Window>& window)
         });
     }
 
-    m_TLAS = std::make_unique<RHI::TLAS>(m_Device, *m_Compute, tlasInstances);
+    m_TLAS = std::make_unique<RHI::TLAS>(m_Device, *m_ComputeCommand, tlasInstances);
 
     m_DescriptorManager->UpdateTLAS(3, m_TLAS->GetAS());
 }
@@ -150,11 +153,14 @@ void Renderer::Draw()
 {
     m_Device->SyncFrame();
 
+    auto& allocator = m_DescriptorAllocators[m_Device->GetCurrentFrameIndex()];
+    allocator->Reset();
+
     if (auto result = m_Swapchain->AcquireNextImage()) {
         if (*result == VK_ERROR_OUT_OF_DATE_KHR) RecreateSwapchain();
     }
 
-    VkCommandBuffer computeCmd = m_Compute->Record([&](VkCommandBuffer cmd) {
+    VkCommandBuffer computeCmd = m_ComputeCommand->Record([&](VkCommandBuffer cmd) {
         VkImageMemoryBarrier2 preRenderBarrier {
             .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
             .srcStageMask = VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT,
@@ -211,7 +217,7 @@ void Renderer::Draw()
         vkCmdPipelineBarrier2(cmd, &postRenderDependency);
     });
 
-    VkCommandBuffer graphicsCmd = m_Graphics->Record([&](VkCommandBuffer cmd) {
+    VkCommandBuffer graphicsCmd = m_GraphicsCommand->Record([&](VkCommandBuffer cmd) {
         VkImageMemoryBarrier2 preRenderBarrier {
             .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
             .srcStageMask = VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT,
@@ -272,7 +278,7 @@ void Renderer::Draw()
         });
 
         vkCmdPushConstants(cmd, m_GraphicsPipeline->GetLayout(), VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(u32), &m_StorageImageIndex);
-        vkCmdPushConstants(cmd, m_GraphicsPipeline->GetLayout(), VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(u32), &m_StorageImageSamplerIndex);
+        vkCmdPushConstants(cmd, m_GraphicsPipeline->GetLayout(), VK_SHADER_STAGE_FRAGMENT_BIT, sizeof(u32), sizeof(u32), &m_StorageImageSamplerIndex);
 
         vkCmdDraw(cmd, 3, 1, 0, 0);
 

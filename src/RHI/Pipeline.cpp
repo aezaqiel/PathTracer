@@ -47,8 +47,11 @@ namespace RHI {
     }
 
     GraphicsPipelineBuilder::GraphicsPipelineBuilder(const std::shared_ptr<Device>& device, const std::shared_ptr<DescriptorManager>& descriptor)
-        : m_Device(device), m_Descriptor(descriptor)
+        : m_Device(device)
     {
+        if (descriptor) {
+            m_Layouts.push_back(descriptor->GetGlobalLayout());
+        }
     }
 
     GraphicsPipelineBuilder& GraphicsPipelineBuilder::SetVertexShader(const std::filesystem::path& path)
@@ -116,6 +119,12 @@ namespace RHI {
         return *this;
     }
 
+    GraphicsPipelineBuilder& GraphicsPipelineBuilder::AddLayout(VkDescriptorSetLayout layout)
+    {
+        m_Layouts.push_back(layout);
+        return *this;
+    }
+
     GraphicsPipelineBuilder& GraphicsPipelineBuilder::AddPushConstant(u32 size, VkShaderStageFlags stage)
     {
         m_PushConstants.push_back(VkPushConstantRange {
@@ -130,13 +139,12 @@ namespace RHI {
     {
         auto pipeline = std::unique_ptr<GraphicsPipeline>(new GraphicsPipeline(m_Device));
 
-        VkDescriptorSetLayout setLayout = m_Descriptor->GetLayout();
         VkPipelineLayoutCreateInfo layoutInfo {
             .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
             .pNext = nullptr,
             .flags = 0,
-            .setLayoutCount = 1,
-            .pSetLayouts = &setLayout,
+            .setLayoutCount = static_cast<u32>(m_Layouts.size()),
+            .pSetLayouts = m_Layouts.data(),
             .pushConstantRangeCount = static_cast<u32>(m_PushConstants.size()),
             .pPushConstantRanges = m_PushConstants.data()
         };
@@ -260,8 +268,11 @@ namespace RHI {
     }
 
     RayTracingPipelineBuilder::RayTracingPipelineBuilder(const std::shared_ptr<Device>& device, const std::shared_ptr<DescriptorManager>& descriptor)
-        : m_Device(device), m_Descriptor(descriptor)
+        : m_Device(device)
     {
+        if (descriptor) {
+            m_Layouts.push_back(descriptor->GetGlobalLayout());
+        }
     }
 
     RayTracingPipelineBuilder& RayTracingPipelineBuilder::AddRayGenShader(const std::filesystem::path& path)
@@ -315,6 +326,12 @@ namespace RHI {
         return *this;
     }
 
+    RayTracingPipelineBuilder& RayTracingPipelineBuilder::AddLayout(VkDescriptorSetLayout layout)
+    {
+        m_Layouts.push_back(layout);
+        return *this;
+    }
+
     RayTracingPipelineBuilder& RayTracingPipelineBuilder::AddPushConstant(u32 size)
     {
         m_PushConstants.push_back(VkPushConstantRange {
@@ -329,13 +346,12 @@ namespace RHI {
     {
         auto pipeline = std::unique_ptr<RayTracingPipelne>(new RayTracingPipelne(m_Device));
 
-        VkDescriptorSetLayout setLayout = m_Descriptor->GetLayout();
         VkPipelineLayoutCreateInfo layoutInfo {
             .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
             .pNext = nullptr,
             .flags = 0,
-            .setLayoutCount = 1,
-            .pSetLayouts = &setLayout,
+            .setLayoutCount = static_cast<u32>(m_Layouts.size()),
+            .pSetLayouts = m_Layouts.data(),
             .pushConstantRangeCount = static_cast<u32>(m_PushConstants.size()),
             .pPushConstantRanges = m_PushConstants.data()
         };

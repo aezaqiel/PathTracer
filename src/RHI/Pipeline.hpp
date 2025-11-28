@@ -59,13 +59,13 @@ namespace RHI {
         GraphicsPipelineBuilder& SetDepthTest(bool enabled, bool write, VkCompareOp compare = VK_COMPARE_OP_LESS);
         GraphicsPipelineBuilder& SetBlending(bool enabled);
 
+        GraphicsPipelineBuilder& AddLayout(VkDescriptorSetLayout layout);
         GraphicsPipelineBuilder& AddPushConstant(u32 size, VkShaderStageFlags stage = VK_SHADER_STAGE_ALL);
 
         std::unique_ptr<GraphicsPipeline> Build();
 
     private:
         std::shared_ptr<Device> m_Device;
-        std::shared_ptr<DescriptorManager> m_Descriptor;
 
         std::unique_ptr<Shader> m_VertexShader;
         std::unique_ptr<Shader> m_FragmentShader;
@@ -110,6 +110,7 @@ namespace RHI {
             .colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT
         };
 
+        std::vector<VkDescriptorSetLayout> m_Layouts;
         std::vector<VkPushConstantRange> m_PushConstants;
     };
 
@@ -145,16 +146,17 @@ namespace RHI {
         RayTracingPipelineBuilder& AddMissShader(const std::filesystem::path& path);
         RayTracingPipelineBuilder& AddClosestHitShader(const std::filesystem::path& path);
 
+        RayTracingPipelineBuilder& AddLayout(VkDescriptorSetLayout layout);
         RayTracingPipelineBuilder& AddPushConstant(u32 size);
 
         std::unique_ptr<RayTracingPipelne> Build();
 
     private:
         std::shared_ptr<Device> m_Device;
-        std::shared_ptr<DescriptorManager> m_Descriptor;
 
         std::vector<std::unique_ptr<Shader>> m_Shaders;
         std::vector<VkRayTracingShaderGroupCreateInfoKHR> m_ShaderGroups;
+        std::vector<VkDescriptorSetLayout> m_Layouts;
         std::vector<VkPushConstantRange> m_PushConstants;
 
         u32 m_RGenCount { 0 };

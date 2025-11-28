@@ -46,9 +46,213 @@ namespace RHI {
         return layout;
     }
 
+    DescriptorAllocator::DescriptorAllocator(const std::shared_ptr<Device>& device)
+        : m_Device(device)
+    {
+    }
+
+    DescriptorAllocator::~DescriptorAllocator()
+    {
+        if (m_CurrentPool != VK_NULL_HANDLE) {
+            vkDestroyDescriptorPool(m_Device->GetDevice(), m_CurrentPool, nullptr);
+        }
+
+        for (auto pool : m_UsedPools) {
+            vkDestroyDescriptorPool(m_Device->GetDevice(), pool, nullptr);
+        }
+
+        for (auto pool : m_FreePools) {
+            vkDestroyDescriptorPool(m_Device->GetDevice(), pool, nullptr);
+        }
+    }
+
+    bool DescriptorAllocator::Allocate(VkDescriptorSetLayout layout, VkDescriptorSet& set)
+    {
+        if (m_CurrentPool == VK_NULL_HANDLE) {
+            m_CurrentPool = GrabPool();
+            m_UsedPools.push_back(m_CurrentPool);
+        }
+
+        VkDescriptorSetAllocateInfo allocateInfo {
+            .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
+            .pNext = nullptr,
+            .descriptorPool = m_CurrentPool,
+            .descriptorSetCount = 1,
+            .pSetLayouts = &layout
+        };
+
+        VkResult result = vkAllocateDescriptorSets(m_Device->GetDevice(), &allocateInfo, &set);
+
+        switch (result) {
+            case VK_SUCCESS: return true;
+            case VK_ERROR_FRAGMENTED_POOL:
+            case VK_ERROR_OUT_OF_POOL_MEMORY:
+                break;
+            default:
+                return false;
+        }
+
+        m_CurrentPool = GrabPool();
+        m_UsedPools.push_back(m_CurrentPool);
+
+        allocateInfo.descriptorPool = m_CurrentPool;
+        VK_CHECK(vkAllocateDescriptorSets(m_Device->GetDevice(), &allocateInfo, &set));
+
+        return true;
+    }
+
+    void DescriptorAllocator::Reset()
+    {
+        for (auto pool : m_UsedPools) {
+            vkResetDescriptorPool(m_Device->GetDevice(), pool, 0);
+            m_FreePools.push_back(pool);
+        }
+
+        m_UsedPools.clear();
+        m_CurrentPool = VK_NULL_HANDLE;
+    }
+
+    VkDescriptorPool DescriptorAllocator::GrabPool()
+    {
+        if (!m_FreePools.empty()) {
+            VkDescriptorPool pool = m_FreePools.back();
+            m_FreePools.pop_back();
+            return pool;
+        }
+
+        std::vector<VkDescriptorPoolSize> sizes = {
+            { VK_DESCRIPTOR_TYPE_SAMPLER, 500 },
+            { VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1000 },
+            { VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, 4000 },
+            { VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1000 },
+            { VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER, 1000 },
+            { VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER, 1000 },
+            { VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 2000 },
+            { VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 2000 },
+            { VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, 1000 },
+            { VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC, 1000 },
+            { VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT, 500 }
+        };
+
+        VkDescriptorPoolCreateInfo poolInfo {
+            .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
+            .pNext = nullptr,
+            .flags = 0,
+            .maxSets = 1000,
+            .poolSizeCount = static_cast<u32>(sizes.size()),
+            .pPoolSizes = sizes.data()
+        };
+
+        VkDescriptorPool pool = VK_NULL_HANDLE;
+        VK_CHECK(vkCreateDescriptorPool(m_Device->GetDevice(), &poolInfo, nullptr, &pool));
+
+        return pool;
+    }
+
+    DescriptorWriter::DescriptorWriter(const std::shared_ptr<Device>& device)
+        : m_Device(device)
+    {
+    }
+
+    DescriptorWriter& DescriptorWriter::WriteImage(u32 binding, VkImageView view, VkSampler sampler, VkImageLayout layout, VkDescriptorType type)
+    {
+        VkDescriptorImageInfo& info = m_ImageInfos.emplace_back(VkDescriptorImageInfo {
+            .sampler = sampler,
+            .imageView = view,
+            .imageLayout = layout
+        });
+
+        m_Writes.push_back(VkWriteDescriptorSet {
+            .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+            .pNext = nullptr,
+            .dstSet = VK_NULL_HANDLE,
+            .dstBinding = binding,
+            .dstArrayElement = 0,
+            .descriptorCount = 1,
+            .descriptorType = type,
+            .pImageInfo = &info,
+            .pBufferInfo = nullptr,
+            .pTexelBufferView = nullptr
+        });
+
+        return *this;
+    }
+
+    DescriptorWriter& DescriptorWriter::WriteBuffer(u32 binding, VkBuffer buffer, VkDeviceSize size, VkDeviceSize offset, VkDescriptorType type)
+    {
+        VkDescriptorBufferInfo& info = m_BufferInfos.emplace_back(VkDescriptorBufferInfo {
+            .buffer = buffer,
+            .offset = offset,
+            .range = size
+        });
+
+        m_Writes.push_back(VkWriteDescriptorSet {
+            .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+            .pNext = nullptr,
+            .dstSet = VK_NULL_HANDLE,
+            .dstBinding = binding,
+            .dstArrayElement = 0,
+            .descriptorCount = 1,
+            .descriptorType = type,
+            .pImageInfo = nullptr,
+            .pBufferInfo = &info,
+            .pTexelBufferView = nullptr
+        });
+
+        return *this;
+    }
+
+    DescriptorWriter& DescriptorWriter::WriteAS(u32 binding, VkAccelerationStructureKHR as)
+    {
+        VkAccelerationStructureKHR& pAS = m_ASes.emplace_back(as);
+
+        VkWriteDescriptorSetAccelerationStructureKHR& info = m_ASInfos.emplace_back(VkWriteDescriptorSetAccelerationStructureKHR {
+            .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET_ACCELERATION_STRUCTURE_KHR,
+            .pNext = nullptr,
+            .accelerationStructureCount = 1,
+            .pAccelerationStructures = &pAS
+        });
+
+        m_Writes.push_back(VkWriteDescriptorSet {
+            .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+            .pNext = &info,
+            .dstSet = VK_NULL_HANDLE,
+            .dstBinding = binding,
+            .dstArrayElement = 0,
+            .descriptorCount = 1,
+            .descriptorType = VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR,
+            .pImageInfo = nullptr,
+            .pBufferInfo = nullptr,
+            .pTexelBufferView = nullptr
+        });
+
+        return *this;
+    }
+
+    bool DescriptorWriter::Build(VkDescriptorSet& set, VkDescriptorSetLayout layout, DescriptorAllocator& allocator)
+    {
+        if (!allocator.Allocate(layout, set)) {
+            return false;
+        }
+
+        Overwrite(set);
+        return true;
+    }
+
+    void DescriptorWriter::Overwrite(VkDescriptorSet set)
+    {
+        for (auto& write : m_Writes) {
+            write.dstSet = set;
+        }
+
+        vkUpdateDescriptorSets(m_Device->GetDevice(), static_cast<u32>(m_Writes.size()), m_Writes.data(), 0, nullptr);
+    }
+
     DescriptorManager::DescriptorManager(const std::shared_ptr<Device>& device)
         : m_Device(device)
     {
+        m_Allocator = std::make_unique<DescriptorAllocator>(m_Device);
+
         InitLayout();
         InitPool();
 

@@ -30,11 +30,12 @@ private:
     std::shared_ptr<RHI::Device> m_Device;
     std::unique_ptr<RHI::Swapchain> m_Swapchain;
 
-    std::unique_ptr<RHI::CommandContext<RHI::QueueType::Graphics>> m_Graphics;
-    std::unique_ptr<RHI::CommandContext<RHI::QueueType::Compute>> m_Compute;
-    std::unique_ptr<RHI::CommandContext<RHI::QueueType::Transfer>> m_Transfer;
+    std::unique_ptr<RHI::CommandContext<RHI::QueueType::Graphics>> m_GraphicsCommand;
+    std::unique_ptr<RHI::CommandContext<RHI::QueueType::Compute>> m_ComputeCommand;
+    std::unique_ptr<RHI::CommandContext<RHI::QueueType::Transfer>> m_TransferCommand;
 
     std::shared_ptr<RHI::DescriptorManager> m_DescriptorManager;
+    std::array<std::unique_ptr<RHI::DescriptorAllocator>, RHI::Device::GetFrameInFlight()> m_DescriptorAllocators;
 
     std::unique_ptr<RHI::GraphicsPipeline> m_GraphicsPipeline;
     std::unique_ptr<RHI::RayTracingPipelne> m_RayTracingPipeline;
