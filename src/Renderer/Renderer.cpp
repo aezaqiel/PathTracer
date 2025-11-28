@@ -153,27 +153,35 @@ void Renderer::Draw()
     VkCommandBuffer computeCmd = m_ComputeCommand->Record([&](VkCommandBuffer cmd) {
         auto storageImage = m_StorageTexture->GetImage();
 
-        VkImageMemoryBarrier2 preRenderBarrier {
-            .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
-            .srcStageMask = VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT,
-            .srcAccessMask = VK_ACCESS_2_NONE,
-            .dstStageMask = VK_PIPELINE_STAGE_2_RAY_TRACING_SHADER_BIT_KHR,
-            .dstAccessMask = VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT,
-            .oldLayout = VK_IMAGE_LAYOUT_UNDEFINED,
-            .newLayout = VK_IMAGE_LAYOUT_GENERAL,
-            .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-            .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-            .image = storageImage->GetImage(),
-            .subresourceRange = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1 }
-        };
+        storageImage->TransitionLayout(cmd,
+            VK_IMAGE_LAYOUT_GENERAL,
+            VK_PIPELINE_STAGE_2_NONE,
+            VK_PIPELINE_STAGE_2_RAY_TRACING_SHADER_BIT_KHR,
+            VK_ACCESS_2_NONE,
+            VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT
+        );
 
-        VkDependencyInfo preRenderDependency {
-            .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
-            .imageMemoryBarrierCount = 1,
-            .pImageMemoryBarriers = &preRenderBarrier
-        };
+        // VkImageMemoryBarrier2 preRenderBarrier {
+        //     .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
+        //     .srcStageMask = VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT,
+        //     .srcAccessMask = VK_ACCESS_2_NONE,
+        //     .dstStageMask = VK_PIPELINE_STAGE_2_RAY_TRACING_SHADER_BIT_KHR,
+        //     .dstAccessMask = VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT,
+        //     .oldLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+        //     .newLayout = VK_IMAGE_LAYOUT_GENERAL,
+        //     .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+        //     .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+        //     .image = storageImage->GetImage(),
+        //     .subresourceRange = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1 }
+        // };
 
-        vkCmdPipelineBarrier2(cmd, &preRenderDependency);
+        // VkDependencyInfo preRenderDependency {
+        //     .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
+        //     .imageMemoryBarrierCount = 1,
+        //     .pImageMemoryBarriers = &preRenderBarrier
+        // };
+
+        // vkCmdPipelineBarrier2(cmd, &preRenderDependency);
 
         m_RayTracingPipeline->Bind(cmd);
         m_DescriptorManager->Bind(cmd, VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR, m_RayTracingPipeline->GetLayout());
@@ -186,27 +194,35 @@ void Renderer::Draw()
         auto extent = storageImage->GetExtent();
         vkCmdTraceRaysKHR(cmd, &rgen, &miss, &hit, &call, extent.width, extent.height, extent.depth);
 
-        VkImageMemoryBarrier2 postRenderBarrier {
-            .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
-            .srcStageMask = VK_PIPELINE_STAGE_2_RAY_TRACING_SHADER_BIT_KHR,
-            .srcAccessMask = VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT,
-            .dstStageMask = VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT,
-            .dstAccessMask = VK_ACCESS_2_NONE,
-            .oldLayout = VK_IMAGE_LAYOUT_GENERAL,
-            .newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-            .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-            .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-            .image = storageImage->GetImage(),
-            .subresourceRange = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1 }
-        };
+        storageImage->TransitionLayout(cmd,
+            VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+            VK_PIPELINE_STAGE_2_RAY_TRACING_SHADER_BIT_KHR,
+            VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT,
+            VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT,
+            VK_ACCESS_2_NONE
+        );
 
-        VkDependencyInfo postRenderDependency {
-            .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
-            .imageMemoryBarrierCount = 1,
-            .pImageMemoryBarriers = &postRenderBarrier
-        };
+        // VkImageMemoryBarrier2 postRenderBarrier {
+        //     .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
+        //     .srcStageMask = VK_PIPELINE_STAGE_2_RAY_TRACING_SHADER_BIT_KHR,
+        //     .srcAccessMask = VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT,
+        //     .dstStageMask = VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT,
+        //     .dstAccessMask = VK_ACCESS_2_NONE,
+        //     .oldLayout = VK_IMAGE_LAYOUT_GENERAL,
+        //     .newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+        //     .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+        //     .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+        //     .image = storageImage->GetImage(),
+        //     .subresourceRange = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1 }
+        // };
 
-        vkCmdPipelineBarrier2(cmd, &postRenderDependency);
+        // VkDependencyInfo postRenderDependency {
+        //     .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
+        //     .imageMemoryBarrierCount = 1,
+        //     .pImageMemoryBarriers = &postRenderBarrier
+        // };
+
+        // vkCmdPipelineBarrier2(cmd, &postRenderDependency);
     });
 
     VkCommandBuffer graphicsCmd = m_GraphicsCommand->Record([&](VkCommandBuffer cmd) {

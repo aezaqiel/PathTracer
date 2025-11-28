@@ -45,7 +45,7 @@ namespace RHI {
                 .a = VK_COMPONENT_SWIZZLE_IDENTITY
             },
             .subresourceRange = {
-                .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+                .aspectMask = GetAspectFlags(),
                 .baseMipLevel = 0,
                 .levelCount = 1,
                 .baseArrayLayer = 0,
@@ -60,6 +60,75 @@ namespace RHI {
     {
         vkDestroyImageView(m_Device->GetDevice(), m_View, nullptr);
         vmaDestroyImage(m_Device->GetAllocator(), m_Image, m_Allocation);
+    }
+
+    void Image::TransitionLayout(VkCommandBuffer cmd, VkImageLayout layout,
+        VkPipelineStageFlags2 srcStage,
+        VkPipelineStageFlags2 dstStage,
+        VkAccessFlags2 srcAccess,
+        VkAccessFlags2 dstAccess
+    )
+    {
+        if (m_Layout == layout) return;
+
+        VkImageMemoryBarrier2 barrier {
+            .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
+            .pNext = nullptr,
+            .srcStageMask = srcStage,
+            .srcAccessMask = srcAccess,
+            .dstStageMask = dstStage,
+            .dstAccessMask = dstAccess,
+            .oldLayout = m_Layout,
+            .newLayout = layout,
+            .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+            .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+            .image = m_Image,
+            .subresourceRange = {
+                .aspectMask = GetAspectFlags(),
+                .baseMipLevel = 0,
+                .levelCount = 1,
+                .baseArrayLayer = 0,
+                .layerCount = 1
+            }
+        };
+
+        if (m_Layout == VK_IMAGE_LAYOUT_UNDEFINED) {
+            barrier.srcStageMask = VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT;
+            barrier.srcAccessMask = VK_ACCESS_2_NONE;
+        }
+
+        VkDependencyInfo dependency {
+            .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
+            .pNext = nullptr,
+            .dependencyFlags = 0,
+            .memoryBarrierCount = 0,
+            .pMemoryBarriers = nullptr,
+            .bufferMemoryBarrierCount = 0,
+            .pBufferMemoryBarriers = nullptr,
+            .imageMemoryBarrierCount = 1,
+            .pImageMemoryBarriers = &barrier
+        };
+
+        vkCmdPipelineBarrier2(cmd, &dependency);
+
+        m_Layout = layout;
+    }
+
+    VkImageAspectFlags Image::GetAspectFlags() const
+    {
+        switch (m_Format) {
+            case VK_FORMAT_D32_SFLOAT:
+            case VK_FORMAT_D32_SFLOAT_S8_UINT:
+            case VK_FORMAT_D24_UNORM_S8_UINT:
+            case VK_FORMAT_D16_UNORM:
+            case VK_FORMAT_D16_UNORM_S8_UINT:
+                return VK_IMAGE_ASPECT_DEPTH_BIT;
+            default:
+                return VK_IMAGE_ASPECT_COLOR_BIT;
+        }
+
+        LOG_WARN("Unexpected VkFormat for image");
+        return VK_IMAGE_ASPECT_NONE;
     }
 
 }

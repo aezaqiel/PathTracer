@@ -21,12 +21,20 @@ namespace RHI {
         Image(const std::shared_ptr<Device>& device, const Spec& spec);
         ~Image();
 
+        void TransitionLayout(VkCommandBuffer cmd, VkImageLayout layout,
+            VkPipelineStageFlags2 srcStage, VkPipelineStageFlags2 dstStage,
+            VkAccessFlags2 srcAccess, VkAccessFlags2 dstAccess
+        );
+
         inline VkImage GetImage() const { return m_Image; }
         inline VkImageView GetView() const { return m_View; }
 
         inline VkExtent3D GetExtent() const { return m_Extent; }
         inline VkFormat GetFormat() const { return m_Format; }
         inline VkImageLayout GetLayout() const { return m_Layout; }
+
+    private:
+        VkImageAspectFlags GetAspectFlags() const;
 
     private:
         std::shared_ptr<Device> m_Device;
