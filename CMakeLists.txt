@@ -66,6 +66,8 @@ add_executable(${PROJECT_NAME}
     src/RHI/Image.cpp
     src/RHI/Sampler.hpp
     src/RHI/Sampler.cpp
+    src/RHI/Texture.hpp
+    src/RHI/Texture.cpp
     src/RHI/Buffer.hpp
     src/RHI/Buffer.cpp
     src/RHI/AccelerationStructure.hpp

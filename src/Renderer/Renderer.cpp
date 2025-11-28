@@ -26,6 +26,32 @@ Renderer::Renderer(const std::shared_ptr<Window>& window)
         allocator = std::make_unique<RHI::DescriptorAllocator>(m_Device);
     }
 
+    auto storageImage = std::make_shared<RHI::Image>(m_Device, RHI::Image::Spec {
+        .extent = { window->GetWidth(), window->GetHeight(), 1 },
+        .format = VK_FORMAT_R32G32B32A32_SFLOAT,
+        .usage = VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT,
+        .memory = VMA_MEMORY_USAGE_GPU_ONLY
+    });
+
+    auto storageSampler = std::make_shared<RHI::Sampler>(m_Device, RHI::Sampler::Spec {
+        .magFilter = VK_FILTER_LINEAR,
+        .minFilter = VK_FILTER_LINEAR,
+        .addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT,
+        .addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT,
+        .addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT,
+        .maxAnisotropy = m_Device->GetProps().properties.limits.maxSamplerAnisotropy,
+        .borderColor = VK_BORDER_COLOR_INT_OPAQUE_BLACK
+    });
+
+    m_StorageTexture = std::make_unique<RHI::Texture>(storageImage, storageSampler);
+
+    m_DescriptorManager->UpdateStorageImage(2, storageImage->GetView(), VK_IMAGE_LAYOUT_GENERAL);
+
+    m_StorageTexture->SetBindlessIndices(
+        m_DescriptorManager->RegisterTexture(storageImage->GetView(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL),
+        m_DescriptorManager->RegisterSampler(storageSampler->GetSampler())
+    );
+
     std::vector<VkFormat> colorFormats = { m_Swapchain->GetFormat() };
 
     m_GraphicsPipeline = RHI::GraphicsPipelineBuilder(m_Device, m_DescriptorManager)
@@ -45,28 +71,6 @@ Renderer::Renderer(const std::shared_ptr<Window>& window)
         .AddMissShader(shaderPath / "miss.rmiss.spv")
         .AddClosestHitShader(shaderPath / "closesthit.rchit.spv")
         .Build();
-
-    m_StorageImage = std::make_unique<RHI::Image>(m_Device, RHI::Image::Spec {
-        .extent = { window->GetWidth(), window->GetHeight(), 1 },
-        .format = VK_FORMAT_R32G32B32A32_SFLOAT,
-        .usage = VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT,
-        .memory = VMA_MEMORY_USAGE_GPU_ONLY
-    });
-
-    m_DescriptorManager->UpdateStorageImage(2, m_StorageImage->GetView(), VK_IMAGE_LAYOUT_GENERAL);
-    m_StorageImageIndex = m_DescriptorManager->RegisterTexture(m_StorageImage->GetView(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
-
-    m_StorageImageSampler = std::make_unique<RHI::Sampler>(m_Device, RHI::Sampler::Spec {
-        .magFilter = VK_FILTER_LINEAR,
-        .minFilter = VK_FILTER_LINEAR,
-        .addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT,
-        .addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT,
-        .addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT,
-        .maxAnisotropy = m_Device->GetProps().properties.limits.maxSamplerAnisotropy,
-        .borderColor = VK_BORDER_COLOR_INT_OPAQUE_BLACK
-    });
-
-    m_StorageImageSamplerIndex = m_DescriptorManager->RegisterSampler(m_StorageImageSampler->GetSampler());
 
     auto model = Scene::GlTFLoader::Load(assetPath / "Suzanne.glb");
 
@@ -147,6 +151,8 @@ void Renderer::Draw()
     }
 
     VkCommandBuffer computeCmd = m_ComputeCommand->Record([&](VkCommandBuffer cmd) {
+        auto storageImage = m_StorageTexture->GetImage();
+
         VkImageMemoryBarrier2 preRenderBarrier {
             .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
             .srcStageMask = VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT,
@@ -157,7 +163,7 @@ void Renderer::Draw()
             .newLayout = VK_IMAGE_LAYOUT_GENERAL,
             .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
             .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-            .image = m_StorageImage->GetImage(),
+            .image = storageImage->GetImage(),
             .subresourceRange = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1 }
         };
 
@@ -177,7 +183,7 @@ void Renderer::Draw()
         auto hit = m_RayTracingPipeline->GetHitRegion();
         auto call = m_RayTracingPipeline->GetCallRegion();
 
-        auto extent = m_StorageImage->GetExtent();
+        auto extent = storageImage->GetExtent();
         vkCmdTraceRaysKHR(cmd, &rgen, &miss, &hit, &call, extent.width, extent.height, extent.depth);
 
         VkImageMemoryBarrier2 postRenderBarrier {
@@ -190,7 +196,7 @@ void Renderer::Draw()
             .newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
             .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
             .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-            .image = m_StorageImage->GetImage(),
+            .image = storageImage->GetImage(),
             .subresourceRange = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1 }
         };
 
@@ -263,8 +269,11 @@ void Renderer::Draw()
             .extent = m_Swapchain->GetExtent()
         });
 
-        vkCmdPushConstants(cmd, m_GraphicsPipeline->GetLayout(), VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(u32), &m_StorageImageIndex);
-        vkCmdPushConstants(cmd, m_GraphicsPipeline->GetLayout(), VK_SHADER_STAGE_FRAGMENT_BIT, sizeof(u32), sizeof(u32), &m_StorageImageSamplerIndex);
+        u32 storageImageIndex = m_StorageTexture->GetImageIndex();
+        u32 storageSamplerIndex = m_StorageTexture->GetSamplerIndex();
+
+        vkCmdPushConstants(cmd, m_GraphicsPipeline->GetLayout(), VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(u32), &storageImageIndex);
+        vkCmdPushConstants(cmd, m_GraphicsPipeline->GetLayout(), VK_SHADER_STAGE_FRAGMENT_BIT, sizeof(u32), sizeof(u32), &storageSamplerIndex);
 
         vkCmdDraw(cmd, 3, 1, 0, 0);
 

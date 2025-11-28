@@ -5,8 +5,7 @@
 #include "RHI/Swapchain.hpp"
 #include "RHI/CommandContext.hpp"
 #include "RHI/Buffer.hpp"
-#include "RHI/Image.hpp"
-#include "RHI/Sampler.hpp"
+#include "RHI/Texture.hpp"
 #include "RHI/AccelerationStructure.hpp"
 #include "RHI/DescriptorManager.hpp"
 #include "RHI/Pipeline.hpp"
@@ -38,14 +37,10 @@ private:
     std::shared_ptr<RHI::DescriptorManager> m_DescriptorManager;
     std::array<std::unique_ptr<RHI::DescriptorAllocator>, RHI::Device::GetFrameInFlight()> m_DescriptorAllocators;
 
+    std::unique_ptr<RHI::Texture> m_StorageTexture;
+
     std::unique_ptr<RHI::GraphicsPipeline> m_GraphicsPipeline;
     std::unique_ptr<RHI::RayTracingPipelne> m_RayTracingPipeline;
-
-    std::unique_ptr<RHI::Image> m_StorageImage;
-    u32 m_StorageImageIndex { 0 };
-
-    std::unique_ptr<RHI::Sampler> m_StorageImageSampler;
-    u32 m_StorageImageSamplerIndex { 0 };
 
     std::unique_ptr<RHI::Buffer> m_VertexBuffer;
     std::unique_ptr<RHI::Buffer> m_IndexBuffer;
