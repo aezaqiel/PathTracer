@@ -19,6 +19,8 @@ namespace RHI {
 
     public:
         Image(const std::shared_ptr<Device>& device, const Spec& spec);
+        Image(const std::shared_ptr<Device>& device, VkImage image, const Spec& spec);
+
         ~Image();
 
         void TransitionLayout(VkCommandBuffer cmd, VkImageLayout layout,
@@ -34,6 +36,7 @@ namespace RHI {
         inline VkImageLayout GetLayout() const { return m_Layout; }
 
     private:
+        void CreateView();
         VkImageAspectFlags GetAspectFlags() const;
 
     private:

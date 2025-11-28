@@ -2,6 +2,7 @@
 
 #include "Instance.hpp"
 #include "Device.hpp"
+#include "Image.hpp"
 
 namespace RHI {
 
@@ -76,34 +77,17 @@ namespace RHI {
         vkGetSwapchainImagesKHR(m_Device->GetDevice(), m_Swapchain, &m_ImageCount, nullptr);
 
         m_Images.resize(m_ImageCount);
-        m_ImageViews.resize(m_ImageCount);
+        std::vector<VkImage> images(m_ImageCount);
 
-        vkGetSwapchainImagesKHR(m_Device->GetDevice(), m_Swapchain, &m_ImageCount, m_Images.data());
+        vkGetSwapchainImagesKHR(m_Device->GetDevice(), m_Swapchain, &m_ImageCount, images.data());
 
         for (u32 i = 0; i < m_ImageCount; ++i) {
-            VkImageViewCreateInfo viewInfo {
-                .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
-                .pNext = nullptr,
-                .flags = 0,
-                .image = m_Images[i],
-                .viewType = VK_IMAGE_VIEW_TYPE_2D,
+            m_Images[i] = std::make_shared<Image>(m_Device, images[i], Image::Spec {
+                .extent = { m_Extent.width, m_Extent.height, 1 },
                 .format = m_Format,
-                .components = {
-                    .r = VK_COMPONENT_SWIZZLE_IDENTITY,
-                    .g = VK_COMPONENT_SWIZZLE_IDENTITY,
-                    .b = VK_COMPONENT_SWIZZLE_IDENTITY,
-                    .a = VK_COMPONENT_SWIZZLE_IDENTITY,
-                },
-                .subresourceRange = {
-                    .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
-                    .baseMipLevel = 0,
-                    .levelCount = 1,
-                    .baseArrayLayer = 0,
-                    .layerCount = 1
-                }
-            };
-
-            VK_CHECK(vkCreateImageView(m_Device->GetDevice(), &viewInfo, nullptr, &m_ImageViews[i]));
+                .usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT,
+                .memory = VMA_MEMORY_USAGE_UNKNOWN
+            });
         }
 
         VkSemaphoreTypeCreateInfo semaphoreType {
@@ -199,12 +183,11 @@ namespace RHI {
         for (u32 i = 0; i < m_ImageCount; ++i) {
             vkDestroySemaphore(m_Device->GetDevice(), m_PresentSemaphores[i], nullptr);
             vkDestroySemaphore(m_Device->GetDevice(), m_ImageAvailableSemaphores[i], nullptr);
-            vkDestroyImageView(m_Device->GetDevice(), m_ImageViews[i], nullptr);
         }
 
         m_PresentSemaphores.clear();
         m_ImageAvailableSemaphores.clear();
-        m_ImageViews.clear();
+
         m_Images.clear();
     }
 

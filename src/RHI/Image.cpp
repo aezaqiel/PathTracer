@@ -31,35 +31,23 @@ namespace RHI {
 
         VK_CHECK(vmaCreateImage(m_Device->GetAllocator(), &imageInfo, &allocationInfo, &m_Image, &m_Allocation, nullptr));
 
-        VkImageViewCreateInfo viewInfo {
-            .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
-            .pNext = nullptr,
-            .flags = 0,
-            .image = m_Image,
-            .viewType = VK_IMAGE_VIEW_TYPE_2D,
-            .format = m_Format,
-            .components = {
-                .r = VK_COMPONENT_SWIZZLE_IDENTITY,
-                .g = VK_COMPONENT_SWIZZLE_IDENTITY,
-                .b = VK_COMPONENT_SWIZZLE_IDENTITY,
-                .a = VK_COMPONENT_SWIZZLE_IDENTITY
-            },
-            .subresourceRange = {
-                .aspectMask = GetAspectFlags(),
-                .baseMipLevel = 0,
-                .levelCount = 1,
-                .baseArrayLayer = 0,
-                .layerCount = 1
-            }
-        };
+        CreateView();
+    }
 
-        VK_CHECK(vkCreateImageView(m_Device->GetDevice(), &viewInfo, nullptr, &m_View));
+    Image::Image(const std::shared_ptr<Device>& device, VkImage image, const Spec& spec)
+        : m_Device(device), m_Image(image), m_Extent(spec.extent), m_Format(spec.format)
+    {
+        m_Layout = VK_IMAGE_LAYOUT_UNDEFINED;
+        CreateView();
     }
 
     Image::~Image()
     {
         vkDestroyImageView(m_Device->GetDevice(), m_View, nullptr);
-        vmaDestroyImage(m_Device->GetAllocator(), m_Image, m_Allocation);
+
+        if (m_Allocation != VK_NULL_HANDLE) {
+            vmaDestroyImage(m_Device->GetAllocator(), m_Image, m_Allocation);
+        }
     }
 
     void Image::TransitionLayout(VkCommandBuffer cmd, VkImageLayout layout,
@@ -112,6 +100,33 @@ namespace RHI {
         vkCmdPipelineBarrier2(cmd, &dependency);
 
         m_Layout = layout;
+    }
+
+    void Image::CreateView()
+    {
+        VkImageViewCreateInfo viewInfo {
+            .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
+            .pNext = nullptr,
+            .flags = 0,
+            .image = m_Image,
+            .viewType = VK_IMAGE_VIEW_TYPE_2D,
+            .format = m_Format,
+            .components = {
+                .r = VK_COMPONENT_SWIZZLE_IDENTITY,
+                .g = VK_COMPONENT_SWIZZLE_IDENTITY,
+                .b = VK_COMPONENT_SWIZZLE_IDENTITY,
+                .a = VK_COMPONENT_SWIZZLE_IDENTITY
+            },
+            .subresourceRange = {
+                .aspectMask = GetAspectFlags(),
+                .baseMipLevel = 0,
+                .levelCount = 1,
+                .baseArrayLayer = 0,
+                .layerCount = 1
+            }
+        };
+
+        VK_CHECK(vkCreateImageView(m_Device->GetDevice(), &viewInfo, nullptr, &m_View));
     }
 
     VkImageAspectFlags Image::GetAspectFlags() const

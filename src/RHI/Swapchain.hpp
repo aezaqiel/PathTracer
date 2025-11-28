@@ -6,6 +6,7 @@ namespace RHI {
 
     class Instance;
     class Device;
+    class Image;
 
     class Swapchain
     {
@@ -18,14 +19,9 @@ namespace RHI {
         inline VkExtent2D GetExtent() const { return m_Extent; }
         inline u32 GetImageCount() const { return m_ImageCount; }
 
-        inline VkImage GetCurrentImage() const
+        inline std::shared_ptr<Image> GetCurrentImage() const
         {
             return m_Images[m_CurrentImageIndex];
-        }
-
-        inline VkImageView GetCurrentImageView() const
-        {
-            return m_ImageViews[m_CurrentImageIndex];
         }
 
         inline VkSemaphore GetCurrentImageSemaphore() const
@@ -64,8 +60,7 @@ namespace RHI {
         VkExtent2D m_Extent { 0, 0 };
 
         u32 m_ImageCount { 0 };
-        std::vector<VkImage> m_Images;
-        std::vector<VkImageView> m_ImageViews;
+        std::vector<std::shared_ptr<Image>> m_Images;
 
         std::vector<VkSemaphore> m_ImageAvailableSemaphores;
         std::vector<VkSemaphore> m_PresentSemaphores;
