@@ -56,29 +56,17 @@ Renderer::Renderer(const std::shared_ptr<Window>& window)
     m_DescriptorManager->UpdateStorageImage(2, m_StorageImage->GetView(), VK_IMAGE_LAYOUT_GENERAL);
     m_StorageImageIndex = m_DescriptorManager->RegisterTexture(m_StorageImage->GetView(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 
-    VkSamplerCreateInfo samplerInfo {
-        .sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
-        .pNext = nullptr,
-        .flags = 0,
+    m_StorageImageSampler = std::make_unique<RHI::Sampler>(m_Device, RHI::Sampler::Spec {
         .magFilter = VK_FILTER_LINEAR,
         .minFilter = VK_FILTER_LINEAR,
-        .mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR,
         .addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT,
         .addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT,
         .addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT,
-        .mipLodBias = 0.0f,
-        .anisotropyEnable = VK_FALSE,
         .maxAnisotropy = m_Device->GetProps().properties.limits.maxSamplerAnisotropy,
-        .compareEnable = VK_FALSE,
-        .compareOp = VK_COMPARE_OP_ALWAYS,
-        .minLod = 0.0f,
-        .maxLod = VK_LOD_CLAMP_NONE,
-        .borderColor = VK_BORDER_COLOR_INT_OPAQUE_BLACK,
-        .unnormalizedCoordinates = VK_FALSE
-    };
-    VK_CHECK(vkCreateSampler(m_Device->GetDevice(), &samplerInfo, nullptr, &m_StorageImageSampler));
+        .borderColor = VK_BORDER_COLOR_INT_OPAQUE_BLACK
+    });
 
-    m_StorageImageSamplerIndex = m_DescriptorManager->RegisterSampler(m_StorageImageSampler);
+    m_StorageImageSamplerIndex = m_DescriptorManager->RegisterSampler(m_StorageImageSampler->GetSampler());
 
     auto model = Scene::GlTFLoader::Load(assetPath / "Suzanne.glb");
 
@@ -145,8 +133,6 @@ Renderer::Renderer(const std::shared_ptr<Window>& window)
 Renderer::~Renderer()
 {
     m_Device->WaitIdle();
-
-    vkDestroySampler(m_Device->GetDevice(), m_StorageImageSampler, nullptr);
 }
 
 void Renderer::Draw()

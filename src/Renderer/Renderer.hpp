@@ -6,6 +6,7 @@
 #include "RHI/CommandContext.hpp"
 #include "RHI/Buffer.hpp"
 #include "RHI/Image.hpp"
+#include "RHI/Sampler.hpp"
 #include "RHI/AccelerationStructure.hpp"
 #include "RHI/DescriptorManager.hpp"
 #include "RHI/Pipeline.hpp"
@@ -43,7 +44,7 @@ private:
     std::unique_ptr<RHI::Image> m_StorageImage;
     u32 m_StorageImageIndex { 0 };
 
-    VkSampler m_StorageImageSampler { VK_NULL_HANDLE };
+    std::unique_ptr<RHI::Sampler> m_StorageImageSampler;
     u32 m_StorageImageSamplerIndex { 0 };
 
     std::unique_ptr<RHI::Buffer> m_VertexBuffer;
