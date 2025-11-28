@@ -1,6 +1,9 @@
 #include "DescriptorManager.hpp"
 
 #include "Device.hpp"
+#include "Image.hpp"
+#include "Sampler.hpp"
+#include "Texture.hpp"
 
 namespace RHI {
 
@@ -253,8 +256,40 @@ namespace RHI {
     {
         m_Allocator = std::make_unique<DescriptorAllocator>(m_Device);
 
-        InitLayout();
-        InitPool();
+        m_Layout = DescriptorLayoutBuilder(m_Device)
+            .AddBinding(0, VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, s_MaxBindlessTextures, VK_SHADER_STAGE_ALL, VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT | VK_DESCRIPTOR_BINDING_UPDATE_AFTER_BIND_BIT)
+            .AddBinding(1, VK_DESCRIPTOR_TYPE_SAMPLER, s_MaxBindlessSamplers, VK_SHADER_STAGE_ALL, VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT | VK_DESCRIPTOR_BINDING_UPDATE_AFTER_BIND_BIT)
+            .AddBinding(2, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1, VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_COMPUTE_BIT)
+            .AddBinding(3, VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR, 1, VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR)
+            .Build();
+
+        std::vector<VkDescriptorPoolSize> sizes = {
+            { VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, s_MaxBindlessTextures },
+            { VK_DESCRIPTOR_TYPE_SAMPLER, s_MaxBindlessSamplers },
+            { VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1 },
+            { VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR, 1 }
+        };
+
+        VkDescriptorPoolCreateInfo poolInfo {
+            .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
+            .pNext = nullptr,
+            .flags = VK_DESCRIPTOR_POOL_CREATE_UPDATE_AFTER_BIND_BIT,
+            .maxSets = 1,
+            .poolSizeCount = static_cast<u32>(sizes.size()),
+            .pPoolSizes = sizes.data()
+        };
+
+        VK_CHECK(vkCreateDescriptorPool(m_Device->GetDevice(), &poolInfo, nullptr, &m_Pool));
+
+        VkDescriptorSetAllocateInfo allocateInfo {
+            .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
+            .pNext = nullptr,
+            .descriptorPool = m_Pool,
+            .descriptorSetCount = 1,
+            .pSetLayouts = &m_Layout
+        };
+
+        VK_CHECK(vkAllocateDescriptorSets(m_Device->GetDevice(), &allocateInfo, &m_Set));
 
         for (u32 i = 0; i < s_MaxBindlessTextures; ++i) m_FreeTextureIndices.push(i);
         for (u32 i = 0; i < s_MaxBindlessSamplers; ++i) m_FreeSamplerIndices.push(i);
@@ -266,88 +301,18 @@ namespace RHI {
         vkDestroyDescriptorSetLayout(m_Device->GetDevice(), m_Layout, nullptr);
     }
 
-    u32 DescriptorManager::RegisterTexture(VkImageView view, VkImageLayout layout)
+    void DescriptorManager::RegisterTexture(Texture& texture, VkImageLayout layout)
     {
-        std::scoped_lock lock(m_TextureMutex);
+        u32 image = RegisterImage(*texture.GetImage(), layout);
+        u32 sampler = RegisterSampler(*texture.GetSampler());
 
-        if (m_FreeTextureIndices.empty()) {
-            LOG_ERROR("Bindless texture heap ran out of indices");
-            return 0;
-        }
-
-        u32 index = m_FreeTextureIndices.front();
-        m_FreeTextureIndices.pop();
-
-        VkDescriptorImageInfo imageInfo {
-            .sampler = VK_NULL_HANDLE,
-            .imageView = view,
-            .imageLayout = layout
-        };
-
-        VkWriteDescriptorSet write {
-            .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-            .pNext = nullptr,
-            .dstSet = m_Set,
-            .dstBinding = 0,
-            .dstArrayElement = index,
-            .descriptorCount = 1,
-            .descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
-            .pImageInfo = &imageInfo,
-            .pBufferInfo = nullptr,
-            .pTexelBufferView = nullptr
-        };
-
-        vkUpdateDescriptorSets(m_Device->GetDevice(), 1, &write, 0, nullptr);
-
-        return index;
+        texture.SetBindlessIndices(image, sampler);
     }
 
-    void DescriptorManager::UnregisterTexture(u32 index)
+    void DescriptorManager::UnregisterTexture(const Texture& texture)
     {
-        std::scoped_lock lock(m_TextureMutex);
-        m_FreeTextureIndices.push(index);
-    }
-
-    u32 DescriptorManager::RegisterSampler(VkSampler sampler)
-    {
-        std::scoped_lock lock(m_SamplerMutex);
-
-        if (m_FreeSamplerIndices.empty()) {
-            LOG_ERROR("Bindless Sampler heap ran out of indices");
-            return 0;
-        }
-
-        u32 index = m_FreeSamplerIndices.front();
-        m_FreeSamplerIndices.pop();
-
-        VkDescriptorImageInfo imageInfo {
-            .sampler = sampler,
-            .imageView = VK_NULL_HANDLE,
-            .imageLayout = VK_IMAGE_LAYOUT_UNDEFINED
-        };
-
-        VkWriteDescriptorSet write {
-            .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-            .pNext = nullptr,
-            .dstSet = m_Set,
-            .dstBinding = 1,
-            .dstArrayElement = index,
-            .descriptorCount = 1,
-            .descriptorType = VK_DESCRIPTOR_TYPE_SAMPLER,
-            .pImageInfo = &imageInfo,
-            .pBufferInfo = nullptr,
-            .pTexelBufferView = nullptr
-        };
-
-        vkUpdateDescriptorSets(m_Device->GetDevice(), 1, &write, 0, nullptr);
-
-        return index;
-    }
-
-    void DescriptorManager::UnregisterSampler(u32 index)
-    {
-        std::scoped_lock lock(m_SamplerMutex);
-        m_FreeSamplerIndices.push(index);
+        UnregisterSampler(texture.GetSamplerIndex());
+        UnregisterImage(texture.GetImageIndex());
     }
 
     void DescriptorManager::Bind(VkCommandBuffer cmd, VkPipelineBindPoint bind, VkPipelineLayout layout, u32 index)
@@ -404,45 +369,88 @@ namespace RHI {
         vkUpdateDescriptorSets(m_Device->GetDevice(), 1, &write, 0, nullptr);
     }
 
-    void DescriptorManager::InitLayout()
+    u32 DescriptorManager::RegisterImage(Image& image, VkImageLayout layout)
     {
-        m_Layout = DescriptorLayoutBuilder(m_Device)
-            .AddBinding(0, VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, s_MaxBindlessTextures, VK_SHADER_STAGE_ALL, VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT | VK_DESCRIPTOR_BINDING_UPDATE_AFTER_BIND_BIT)
-            .AddBinding(1, VK_DESCRIPTOR_TYPE_SAMPLER, s_MaxBindlessSamplers, VK_SHADER_STAGE_ALL, VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT | VK_DESCRIPTOR_BINDING_UPDATE_AFTER_BIND_BIT)
-            .AddBinding(2, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1, VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_COMPUTE_BIT)
-            .AddBinding(3, VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR, 1, VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR)
-            .Build();
+        std::scoped_lock lock(m_TextureMutex);
+
+        if (m_FreeTextureIndices.empty()) {
+            LOG_ERROR("Bindless texture heap ran out of indices");
+            return 0;
+        }
+
+        u32 index = m_FreeTextureIndices.front();
+        m_FreeTextureIndices.pop();
+
+        VkDescriptorImageInfo imageInfo {
+            .sampler = VK_NULL_HANDLE,
+            .imageView = image.GetView(),
+            .imageLayout = layout
+        };
+
+        VkWriteDescriptorSet write {
+            .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+            .pNext = nullptr,
+            .dstSet = m_Set,
+            .dstBinding = 0,
+            .dstArrayElement = index,
+            .descriptorCount = 1,
+            .descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
+            .pImageInfo = &imageInfo,
+            .pBufferInfo = nullptr,
+            .pTexelBufferView = nullptr
+        };
+
+        vkUpdateDescriptorSets(m_Device->GetDevice(), 1, &write, 0, nullptr);
+
+        return index;
     }
 
-    void DescriptorManager::InitPool()
+    void DescriptorManager::UnregisterImage(u32 index)
     {
-        std::vector<VkDescriptorPoolSize> sizes = {
-            { VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, s_MaxBindlessTextures },
-            { VK_DESCRIPTOR_TYPE_SAMPLER, s_MaxBindlessSamplers },
-            { VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1 },
-            { VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR, 1 }
+        std::scoped_lock lock(m_TextureMutex);
+        m_FreeTextureIndices.push(index);
+    }
+
+    u32 DescriptorManager::RegisterSampler(Sampler& sampler)
+    {
+        std::scoped_lock lock(m_SamplerMutex);
+
+        if (m_FreeSamplerIndices.empty()) {
+            LOG_ERROR("Bindless Sampler heap ran out of indices");
+            return 0;
+        }
+
+        u32 index = m_FreeSamplerIndices.front();
+        m_FreeSamplerIndices.pop();
+
+        VkDescriptorImageInfo imageInfo {
+            .sampler = sampler.GetSampler(),
+            .imageView = VK_NULL_HANDLE,
+            .imageLayout = VK_IMAGE_LAYOUT_UNDEFINED
         };
 
-        VkDescriptorPoolCreateInfo poolInfo {
-            .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
+        VkWriteDescriptorSet write {
+            .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
             .pNext = nullptr,
-            .flags = VK_DESCRIPTOR_POOL_CREATE_UPDATE_AFTER_BIND_BIT,
-            .maxSets = 1,
-            .poolSizeCount = static_cast<u32>(sizes.size()),
-            .pPoolSizes = sizes.data()
+            .dstSet = m_Set,
+            .dstBinding = 1,
+            .dstArrayElement = index,
+            .descriptorCount = 1,
+            .descriptorType = VK_DESCRIPTOR_TYPE_SAMPLER,
+            .pImageInfo = &imageInfo,
+            .pBufferInfo = nullptr,
+            .pTexelBufferView = nullptr
         };
 
-        VK_CHECK(vkCreateDescriptorPool(m_Device->GetDevice(), &poolInfo, nullptr, &m_Pool));
+        vkUpdateDescriptorSets(m_Device->GetDevice(), 1, &write, 0, nullptr);
 
-        VkDescriptorSetAllocateInfo allocateInfo {
-            .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
-            .pNext = nullptr,
-            .descriptorPool = m_Pool,
-            .descriptorSetCount = 1,
-            .pSetLayouts = &m_Layout
-        };
+        return index;
+    }
 
-        VK_CHECK(vkAllocateDescriptorSets(m_Device->GetDevice(), &allocateInfo, &m_Set));
+    void DescriptorManager::UnregisterSampler(u32 index)
+    {
+        std::scoped_lock lock(m_SamplerMutex);
+        m_FreeSamplerIndices.push(index);
     }
 
 }

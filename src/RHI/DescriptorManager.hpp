@@ -5,6 +5,9 @@
 namespace RHI {
 
     class Device;
+    class Image;
+    class Sampler;
+    class Texture;
 
     struct DescriptorLayoutBuilder
     {
@@ -75,11 +78,8 @@ namespace RHI {
         DescriptorManager(const std::shared_ptr<Device>& device);
         ~DescriptorManager();
 
-        u32 RegisterTexture(VkImageView view, VkImageLayout layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
-        void UnregisterTexture(u32 index);
-
-        u32 RegisterSampler(VkSampler sampler);
-        void UnregisterSampler(u32 index);
+        void RegisterTexture(Texture& texture, VkImageLayout layout);
+        void UnregisterTexture(const Texture& texture);
 
         void Bind(VkCommandBuffer cmd, VkPipelineBindPoint bind, VkPipelineLayout layout, u32 index = 0);
 
@@ -92,8 +92,11 @@ namespace RHI {
         DescriptorAllocator& GetAllocator() const { return *m_Allocator; }
 
     private:
-        void InitLayout();
-        void InitPool();
+        u32 RegisterImage(Image& image, VkImageLayout layout);
+        void UnregisterImage(u32 index);
+
+        u32 RegisterSampler(Sampler& sampler);
+        void UnregisterSampler(u32 index);
 
     private:
         inline static constexpr u32 s_MaxBindlessTextures { 4096 };

@@ -46,11 +46,7 @@ Renderer::Renderer(const std::shared_ptr<Window>& window)
     m_StorageTexture = std::make_unique<RHI::Texture>(storageImage, storageSampler);
 
     m_DescriptorManager->UpdateStorageImage(2, storageImage->GetView(), VK_IMAGE_LAYOUT_GENERAL);
-
-    m_StorageTexture->SetBindlessIndices(
-        m_DescriptorManager->RegisterTexture(storageImage->GetView(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL),
-        m_DescriptorManager->RegisterSampler(storageSampler->GetSampler())
-    );
+    m_DescriptorManager->RegisterTexture(*m_StorageTexture, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 
     std::vector<VkFormat> colorFormats = { m_Swapchain->GetFormat() };
 
