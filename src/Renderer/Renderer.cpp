@@ -67,11 +67,13 @@ Renderer::Renderer(const std::shared_ptr<Window>& window)
         })
     );
 
-    m_CameraBuffer = std::make_unique<RHI::Buffer>(m_Device, RHI::Buffer::Spec {
-        .size = sizeof(Scene::CameraData),
-        .usage = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
-        .memory = VMA_MEMORY_USAGE_CPU_TO_GPU
-    });
+    for (usize i = 0; i < RHI::Device::GetFrameInFlight(); ++i) {
+        m_CamBuffers[i] = std::make_unique<RHI::Buffer>(m_Device, RHI::Buffer::Spec {
+            .size = sizeof(Scene::CameraData),
+            .usage = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+            .memory = VMA_MEMORY_USAGE_CPU_TO_GPU
+        });
+    }
 
     m_BindlessHeap = std::make_unique<RHI::BindlessHeap>(m_Device);
     m_BindlessHeap->RegisterTexture(*m_StorageTexture);
@@ -122,10 +124,15 @@ void Renderer::Draw(Scene::CameraData&& cam)
     m_Device->SyncFrame();
 
     if (auto result = m_Swapchain->AcquireNextImage()) {
-        if (*result == VK_ERROR_OUT_OF_DATE_KHR) RecreateSwapchain();
+        if (*result == VK_ERROR_OUT_OF_DATE_KHR) {
+            RecreateSwapchain();
+            return;
+        }
     }
 
-    m_CameraBuffer->Write(&cam, sizeof(Scene::CameraData));
+    auto& camBuffer = m_CamBuffers[m_Device->GetCurrentFrameIndex()];
+
+    camBuffer->Write(&cam, sizeof(Scene::CameraData));
 
     VkCommandBuffer computeCmd = m_ComputeCommand->Record([&](VkCommandBuffer cmd) {
         auto storageImage = m_StorageTexture->GetImage();
@@ -144,7 +151,7 @@ void Renderer::Draw(Scene::CameraData&& cam)
         RHI::DescriptorWriter()
             .WriteAS(0, m_TLAS->GetAS())
             .WriteImage(1, m_StorageTexture->GetImage()->GetView(), VK_NULL_HANDLE, VK_IMAGE_LAYOUT_GENERAL, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE)
-            .WriteBuffer(2, m_CameraBuffer->GetBuffer(), m_CameraBuffer->GetSize(), 0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER)
+            .WriteBuffer(2, camBuffer->GetBuffer(), camBuffer->GetSize(), 0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER)
             .WriteBuffer(3, m_ObjectDescBuffer->GetBuffer(), m_ObjectDescBuffer->GetSize(), 0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER)
             .WriteBuffer(4, m_MaterialBuffer->GetBuffer(), m_MaterialBuffer->GetSize(), 0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER)
             .Push(cmd, VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR, m_RayTracingPipeline->GetLayout(), 1);
@@ -251,7 +258,7 @@ void Renderer::Draw(Scene::CameraData&& cam)
 
 void Renderer::LoadScene()
 {
-    auto model = Scene::GlTFLoader::Load(s_AssetPath / "Suzanne.glb");
+    auto model = Scene::GlTFLoader::Load(s_AssetPath / "Sponza.glb");
 
     m_VertexBuffer = std::make_unique<RHI::Buffer>(m_Device, RHI::Buffer::Spec {
         .size = model->vertices.size() * sizeof(Scene::Vertex),

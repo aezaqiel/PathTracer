@@ -32,6 +32,7 @@ add_subdirectory(thirdparty/glfw)
 
 file(TO_CMAKE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/assets ASSET_FOLDER)
 file(TO_CMAKE_PATH ${SHADER_BIN_DIR} SHADER_FOLDER)
+file(TO_CMAKE_PATH ${CMAKE_CURRENT_BINARY_DIR}/log LOG_FOLDER)
 
 configure_file(
     ${CMAKE_CURRENT_SOURCE_DIR}/PathConfig.inl.in

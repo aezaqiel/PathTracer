@@ -53,3 +53,13 @@
 #else
     #define VK_CHECK(expr) (expr)
 #endif
+
+namespace VkUtils {
+
+    template <typename T>
+    inline T AlignUp(T value, T alignment)
+    {
+        return (value + alignment - 1) & ~(alignment - 1);
+    }
+
+}

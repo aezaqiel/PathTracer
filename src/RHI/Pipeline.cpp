@@ -5,15 +5,6 @@
 
 namespace RHI {
 
-    namespace {
-
-        u32 AlignUp(u32 value, u32 alignment)
-        {
-            return (value + alignment - 1) & ~(alignment - 1);
-        }
-    
-    }
-
     Pipeline::Pipeline(const std::shared_ptr<Device>& device)
         : m_Device(device)
     {
@@ -389,16 +380,16 @@ namespace RHI {
         u32 handleAlignment = rtProps.shaderGroupHandleAlignment;
         u32 baseAlignment = rtProps.shaderGroupBaseAlignment;
 
-        u32 handleSizeAligned = AlignUp(handleSize, handleAlignment);
+        u32 handleSizeAligned = VkUtils::AlignUp(handleSize, handleAlignment);
 
-        pipeline->m_RGenRegion.stride = AlignUp(handleSizeAligned, baseAlignment);
-        pipeline->m_RGenRegion.size = AlignUp(m_RGenCount * handleSizeAligned, baseAlignment);
+        pipeline->m_RGenRegion.stride = VkUtils::AlignUp(handleSizeAligned, baseAlignment);
+        pipeline->m_RGenRegion.size = VkUtils::AlignUp(m_RGenCount * handleSizeAligned, baseAlignment);
 
         pipeline->m_MissRegion.stride = handleSizeAligned;
-        pipeline->m_MissRegion.size = AlignUp(m_MissCount * handleSizeAligned, baseAlignment);
+        pipeline->m_MissRegion.size = VkUtils::AlignUp(m_MissCount * handleSizeAligned, baseAlignment);
 
         pipeline->m_HitRegion.stride = handleSizeAligned;
-        pipeline->m_HitRegion.size = AlignUp(m_HitCount * handleSizeAligned, baseAlignment);
+        pipeline->m_HitRegion.size = VkUtils::AlignUp(m_HitCount * handleSizeAligned, baseAlignment);
 
         pipeline->m_CallRegion.stride = 0;
         pipeline->m_CallRegion.size = 0;

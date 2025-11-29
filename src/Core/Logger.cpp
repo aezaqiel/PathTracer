@@ -1,13 +1,27 @@
 #include "Logger.hpp"
 
 #include <spdlog/sinks/stdout_color_sinks.h>
+#include <spdlog/sinks/basic_file_sink.h>
+
+#include "PathConfig.inl"
+
+namespace {
+
+    std::filesystem::path s_LogPath(PathConfig::LogDir);
+
+}
 
 void Logger::Init()
 {
     if (s_Initialized) return;
 
+    if (!std::filesystem::exists(s_LogPath)) {
+        std::filesystem::create_directory(s_LogPath);
+    }
+
     std::vector<spdlog::sink_ptr> sinks {
         std::make_shared<spdlog::sinks::stdout_color_sink_mt>(),
+        std::make_shared<spdlog::sinks::basic_file_sink_mt>((s_LogPath / "PathTracer.log").string(), true)
     };
 
     for (auto& sink : sinks) {

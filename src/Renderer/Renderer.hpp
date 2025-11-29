@@ -38,7 +38,7 @@ private:
     std::unique_ptr<RHI::CommandContext<RHI::QueueType::Transfer>> m_TransferCommand;
 
     std::unique_ptr<RHI::Texture> m_StorageTexture;
-    std::unique_ptr<RHI::Buffer> m_CameraBuffer;
+    std::array<std::unique_ptr<RHI::Buffer>, RHI::Device::GetFrameInFlight()> m_CamBuffers;
 
     std::unique_ptr<RHI::BindlessHeap> m_BindlessHeap;
     VkDescriptorSetLayout m_DrawLayout { VK_NULL_HANDLE };
