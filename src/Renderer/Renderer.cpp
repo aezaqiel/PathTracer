@@ -10,6 +10,30 @@ namespace {
     std::filesystem::path s_ShaderPath(PathConfig::ShaderDir);
     std::filesystem::path s_AssetPath(PathConfig::AssetDir);
 
+    struct GPUMaterial
+    {
+        glm::vec4 baseColorFactor;
+        glm::vec3 emissiveFactor;
+        f32 metallicFactor;
+        f32 roughnessFactor;
+        f32 alphaCutOff;
+        i32 alphaMode;
+        i32 baseColorTexture;
+        i32 metallicRoughnessTexture;
+        i32 normalTexture;
+        i32 occlusionTexture;
+        i32 emissiveTexture;
+        i32 _p[3];
+    };
+
+    struct RenderObject
+    {
+        u64 vertex;
+        u64 index;
+        u32 material;
+        u32 _p;
+    };
+
 }
 
 Renderer::Renderer(const std::shared_ptr<Window>& window)
@@ -56,6 +80,8 @@ Renderer::Renderer(const std::shared_ptr<Window>& window)
         .AddBinding(0, VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR, VK_SHADER_STAGE_RAYGEN_BIT_KHR)
         .AddBinding(1, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, VK_SHADER_STAGE_RAYGEN_BIT_KHR)
         .AddBinding(2, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_RAYGEN_BIT_KHR)
+        .AddBinding(3, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR)
+        .AddBinding(4, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR)
         .Build();
 
     std::vector<VkFormat> colorFormats = { m_Swapchain->GetFormat() };
@@ -119,6 +145,8 @@ void Renderer::Draw(Scene::CameraData&& cam)
             .WriteAS(0, m_TLAS->GetAS())
             .WriteImage(1, m_StorageTexture->GetImage()->GetView(), VK_NULL_HANDLE, VK_IMAGE_LAYOUT_GENERAL, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE)
             .WriteBuffer(2, m_CameraBuffer->GetBuffer(), m_CameraBuffer->GetSize(), 0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER)
+            .WriteBuffer(3, m_ObjectDescBuffer->GetBuffer(), m_ObjectDescBuffer->GetSize(), 0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER)
+            .WriteBuffer(4, m_MaterialBuffer->GetBuffer(), m_MaterialBuffer->GetSize(), 0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER)
             .Push(cmd, VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR, m_RayTracingPipeline->GetLayout(), 1);
 
         auto rgen = m_RayTracingPipeline->GetRGenRegion();
@@ -239,6 +267,160 @@ void Renderer::LoadScene()
     });
     m_IndexBuffer->Write(model->indices.data(), m_IndexBuffer->GetSize());
 
+    std::vector<u32> textures;
+    textures.resize(model->textures.size());
+
+    m_SceneTextures.reserve(model->textures.size());
+
+    for (usize i = 0; i < model->textures.size(); ++i) {
+        auto& tex = model->textures[i];
+
+        VkFormat format;
+        if (tex.channels == 4) format = VK_FORMAT_R8G8B8A8_UNORM;
+        else if (tex.channels == 3) format = VK_FORMAT_R8G8B8_UNORM;
+        else {
+            LOG_WARN("Unsupported texture channel count: {}", tex.channels);
+            continue;
+        }
+
+        auto image = std::make_shared<RHI::Image>(m_Device, RHI::Image::Spec {
+            .extent = { tex.width, tex.height, 1 },
+            .format = format,
+            .usage = VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT,
+            .memory = VMA_MEMORY_USAGE_GPU_ONLY
+        });
+
+        VkDeviceSize imageSize = tex.pixels.size();
+        RHI::Buffer staging(m_Device, RHI::Buffer::Spec {
+            .size = imageSize,
+            .usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+            .memory = VMA_MEMORY_USAGE_CPU_ONLY
+        });
+        staging.Write(reinterpret_cast<void*>(tex.pixels.data()), imageSize);
+
+        VkCommandBuffer transferCmd = m_TransferCommand->Record([&](VkCommandBuffer cmd) {
+            image->TransitionLayout(cmd,
+                VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT,
+                VK_PIPELINE_STAGE_2_TRANSFER_BIT,
+                VK_ACCESS_2_NONE,
+                VK_ACCESS_2_TRANSFER_WRITE_BIT
+            );
+
+            VkBufferImageCopy copyRegion {
+                .bufferOffset = 0,
+                .bufferRowLength = 0,
+                .bufferImageHeight = 0,
+                .imageSubresource = {
+                    .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+                    .mipLevel = 0,
+                    .baseArrayLayer = 0,
+                    .layerCount = 1
+                },
+                .imageOffset = { 0, 0, 0 },
+                .imageExtent = image->GetExtent()
+            };
+
+            vkCmdCopyBufferToImage(cmd, staging.GetBuffer(), image->GetImage(), VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &copyRegion);
+
+            image->TransitionLayout(cmd,
+                VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+                VK_PIPELINE_STAGE_2_TRANSFER_BIT,
+                VK_PIPELINE_STAGE_2_NONE,
+                VK_ACCESS_2_TRANSFER_WRITE_BIT,
+                VK_ACCESS_2_NONE,
+                m_Device->GetQueueFamily<RHI::QueueType::Transfer>(),
+                m_Device->GetQueueFamily<RHI::QueueType::Compute>()
+            );
+        });
+
+        VkCommandBuffer computeCmd = m_ComputeCommand->Record([&](VkCommandBuffer cmd) {
+            image->TransitionLayout(cmd,
+                VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+                VK_PIPELINE_STAGE_2_NONE,
+                VK_PIPELINE_STAGE_2_RAY_TRACING_SHADER_BIT_KHR,
+                VK_ACCESS_2_NONE,
+                VK_ACCESS_2_SHADER_READ_BIT,
+                m_Device->GetQueueFamily<RHI::QueueType::Transfer>(),
+                m_Device->GetQueueFamily<RHI::QueueType::Compute>()
+            );
+        });
+
+        auto semaphore = m_Device->Submit<RHI::QueueType::Transfer>(transferCmd, {}, {});
+
+        std::vector<VkSemaphoreSubmitInfo> signal = { semaphore };
+        m_Device->Submit<RHI::QueueType::Compute>(computeCmd, signal, {});
+
+        m_Device->SyncTimeline<RHI::QueueType::Compute>();
+
+        auto sampler = std::make_shared<RHI::Sampler>(m_Device, RHI::Sampler::Spec {
+            .magFilter = VK_FILTER_LINEAR,
+            .minFilter = VK_FILTER_LINEAR,
+            .addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT,
+            .addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT,
+            .addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT,
+            .maxAnisotropy = m_Device->GetProps().properties.limits.maxSamplerAnisotropy,
+            .borderColor = VK_BORDER_COLOR_INT_OPAQUE_BLACK
+        });
+
+        auto texture = std::make_unique<RHI::Texture>(image, sampler);
+        textures[i] = m_BindlessHeap->RegisterTexture(*texture);
+
+        m_SceneTextures.push_back(std::move(texture));
+    }
+
+    std::vector<GPUMaterial> gpuMaterials;
+    gpuMaterials.reserve(model->materials.size());
+
+    for (const auto& mat : model->materials) {
+        gpuMaterials.push_back(GPUMaterial {
+            .baseColorFactor = mat.baseColorFactor,
+            .emissiveFactor = mat.emissiveFactor,
+            .metallicFactor = mat.metallicFactor,
+            .roughnessFactor = mat.roughnessFactor,
+            .alphaCutOff = mat.alphaCutoff,
+            .alphaMode = static_cast<i32>(mat.alphaMode),
+            .baseColorTexture = mat.baseColorTexture >= 0 ? static_cast<i32>(textures[mat.baseColorTexture]) : -1,
+            .metallicRoughnessTexture = mat.metallicRoughnessTexture >= 0 ? static_cast<i32>(textures[mat.metallicRoughnessTexture]) : -1,
+            .normalTexture = mat.normalTexture >= 0 ? static_cast<i32>(textures[mat.normalTexture]) : -1,
+            .occlusionTexture = mat.occlusionTexture >= 0 ? static_cast<i32>(textures[mat.occlusionTexture]) : -1,
+            .emissiveTexture = mat.emissiveTexture >= 0 ? static_cast<i32>(textures[mat.emissiveTexture]) : -1
+        });
+    }
+
+    m_MaterialBuffer = std::make_unique<RHI::Buffer>(m_Device, RHI::Buffer::Spec {
+        .size = gpuMaterials.size() * sizeof(GPUMaterial),
+        .usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
+        .memory = VMA_MEMORY_USAGE_CPU_TO_GPU
+    });
+    m_MaterialBuffer->Write(gpuMaterials.data(), m_MaterialBuffer->GetSize());
+
+    std::vector<RenderObject> renderObjs;
+    std::vector<u32> objIndices;
+
+    objIndices.reserve(model->meshes.size());
+
+    VkDeviceAddress vertexAddress = m_VertexBuffer->GetDeviceAddress();
+    VkDeviceAddress indexAddress = m_IndexBuffer->GetDeviceAddress();
+
+    for (const auto& mesh : model->meshes) {
+        objIndices.push_back(static_cast<u32>(renderObjs.size()));
+        for (const auto& prim : mesh.primitives) {
+            renderObjs.push_back(RenderObject {
+                .vertex = vertexAddress + prim.vertexOffset * sizeof(Scene::Vertex),
+                .index = indexAddress + prim.indexOffset * sizeof(u32),
+                .material = prim.materialIndex
+            });
+        }
+    }
+
+    m_ObjectDescBuffer = std::make_unique<RHI::Buffer>(m_Device, RHI::Buffer::Spec {
+        .size = renderObjs.size() * sizeof(RenderObject),
+        .usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
+        .memory = VMA_MEMORY_USAGE_CPU_TO_GPU
+    });
+    m_ObjectDescBuffer->Write(renderObjs.data(), m_ObjectDescBuffer->GetSize());
+
     m_BLASes.reserve(model->meshes.size());
 
     for (const auto& mesh : model->meshes) {
@@ -273,7 +455,7 @@ void Renderer::LoadScene()
         tlasInstances.push_back(RHI::TLAS::Instance {
             .blas = m_BLASes[node.meshIndex].get(),
             .transform = node.transform,
-            .instanceCustomIndex = 0,
+            .instanceCustomIndex = objIndices[node.meshIndex],
             .mask = 0xFF,
             .sbtOffset = 0,
             .flags = VK_GEOMETRY_INSTANCE_TRIANGLE_FACING_CULL_DISABLE_BIT_KHR

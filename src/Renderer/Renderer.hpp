@@ -49,6 +49,10 @@ private:
     std::unique_ptr<RHI::Buffer> m_VertexBuffer;
     std::unique_ptr<RHI::Buffer> m_IndexBuffer;
 
+    std::vector<std::unique_ptr<RHI::Texture>> m_SceneTextures;
+    std::unique_ptr<RHI::Buffer> m_MaterialBuffer;
+    std::unique_ptr<RHI::Buffer> m_ObjectDescBuffer;
+
     std::vector<std::unique_ptr<RHI::BLAS>> m_BLASes;
     std::unique_ptr<RHI::TLAS> m_TLAS;
 };

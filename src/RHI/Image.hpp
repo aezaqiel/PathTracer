@@ -25,7 +25,9 @@ namespace RHI {
 
         void TransitionLayout(VkCommandBuffer cmd, VkImageLayout layout,
             VkPipelineStageFlags2 srcStage, VkPipelineStageFlags2 dstStage,
-            VkAccessFlags2 srcAccess, VkAccessFlags2 dstAccess
+            VkAccessFlags2 srcAccess, VkAccessFlags2 dstAccess,
+            u32 srcQueue = VK_QUEUE_FAMILY_IGNORED,
+            u32 dstQueue = VK_QUEUE_FAMILY_IGNORED
         );
 
         inline VkImage GetImage() const { return m_Image; }

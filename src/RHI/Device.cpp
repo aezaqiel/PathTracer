@@ -100,12 +100,19 @@ namespace RHI {
             VK_KHR_RAY_TRACING_PIPELINE_EXTENSION_NAME,
             VK_KHR_DEFERRED_HOST_OPERATIONS_EXTENSION_NAME,
             VK_KHR_SWAPCHAIN_EXTENSION_NAME,
-            VK_KHR_PUSH_DESCRIPTOR_EXTENSION_NAME
+            VK_KHR_PUSH_DESCRIPTOR_EXTENSION_NAME,
+            VK_EXT_SCALAR_BLOCK_LAYOUT_EXTENSION_NAME
+        };
+
+        VkPhysicalDeviceScalarBlockLayoutFeatures scalarBlock {
+            .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SCALAR_BLOCK_LAYOUT_FEATURES,
+            .pNext = nullptr,
+            .scalarBlockLayout = VK_TRUE
         };
 
         VkPhysicalDeviceDescriptorIndexingFeatures descriptorIndexing {
             .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_INDEXING_FEATURES,
-            .pNext = nullptr,
+            .pNext = &scalarBlock,
             .shaderInputAttachmentArrayDynamicIndexing = VK_FALSE,
             .shaderUniformTexelBufferArrayDynamicIndexing = VK_FALSE,
             .shaderStorageTexelBufferArrayDynamicIndexing = VK_FALSE,
@@ -178,7 +185,8 @@ namespace RHI {
             .sType  = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2,
             .pNext = &timelineSemaphore,
             .features = {
-                .samplerAnisotropy = VK_TRUE
+                .samplerAnisotropy = VK_TRUE,
+                .shaderInt64 = VK_TRUE
             }
         };
 

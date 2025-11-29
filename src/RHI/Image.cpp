@@ -54,10 +54,12 @@ namespace RHI {
         VkPipelineStageFlags2 srcStage,
         VkPipelineStageFlags2 dstStage,
         VkAccessFlags2 srcAccess,
-        VkAccessFlags2 dstAccess
+        VkAccessFlags2 dstAccess,
+        u32 srcQueue,
+        u32 dstQueue
     )
     {
-        if (m_Layout == layout) return;
+        if (m_Layout == layout && srcQueue == VK_QUEUE_FAMILY_IGNORED && dstQueue == VK_QUEUE_FAMILY_IGNORED) return;
 
         VkImageMemoryBarrier2 barrier {
             .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
@@ -68,8 +70,8 @@ namespace RHI {
             .dstAccessMask = dstAccess,
             .oldLayout = m_Layout,
             .newLayout = layout,
-            .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-            .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+            .srcQueueFamilyIndex = srcQueue,
+            .dstQueueFamilyIndex = dstQueue,
             .image = m_Image,
             .subresourceRange = {
                 .aspectMask = GetAspectFlags(),
@@ -81,8 +83,10 @@ namespace RHI {
         };
 
         if (m_Layout == VK_IMAGE_LAYOUT_UNDEFINED) {
-            barrier.srcStageMask = VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT;
-            barrier.srcAccessMask = VK_ACCESS_2_NONE;
+            if (srcQueue == VK_QUEUE_FAMILY_IGNORED && dstQueue == VK_QUEUE_FAMILY_IGNORED) {
+                barrier.srcStageMask = VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT;
+                barrier.srcAccessMask = VK_ACCESS_2_NONE;
+            }
         }
 
         VkDependencyInfo dependency {
