@@ -37,11 +37,11 @@ private:
     std::unique_ptr<RHI::CommandContext<RHI::QueueType::Compute>> m_ComputeCommand;
     std::unique_ptr<RHI::CommandContext<RHI::QueueType::Transfer>> m_TransferCommand;
 
-    std::unique_ptr<RHI::BindlessHeap> m_BindlessHeap;
-    VkDescriptorSetLayout m_DrawLayout { VK_NULL_HANDLE };
-
     std::unique_ptr<RHI::Texture> m_StorageTexture;
     std::unique_ptr<RHI::Buffer> m_CameraBuffer;
+
+    std::unique_ptr<RHI::BindlessHeap> m_BindlessHeap;
+    VkDescriptorSetLayout m_DrawLayout { VK_NULL_HANDLE };
 
     std::unique_ptr<RHI::GraphicsPipeline> m_GraphicsPipeline;
     std::unique_ptr<RHI::RayTracingPipelne> m_RayTracingPipeline;

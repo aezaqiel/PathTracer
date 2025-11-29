@@ -5,6 +5,13 @@
 #include "Scene/SceneLoader.hpp"
 #include "PathConfig.inl"
 
+namespace {
+
+    std::filesystem::path s_ShaderPath(PathConfig::ShaderDir);
+    std::filesystem::path s_AssetPath(PathConfig::AssetDir);
+
+}
+
 Renderer::Renderer(const std::shared_ptr<Window>& window)
     : m_Window(window)
 {
@@ -18,33 +25,23 @@ Renderer::Renderer(const std::shared_ptr<Window>& window)
     m_ComputeCommand = std::make_unique<RHI::CommandContext<RHI::QueueType::Compute>>(m_Device);
     m_TransferCommand = std::make_unique<RHI::CommandContext<RHI::QueueType::Transfer>>(m_Device);
 
-    m_BindlessHeap = std::make_unique<RHI::BindlessHeap>(m_Device);
-
-    m_DrawLayout = RHI::DescriptorLayoutBuilder(m_Device)
-        .AddBinding(0, VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR, VK_SHADER_STAGE_RAYGEN_BIT_KHR)
-        .AddBinding(1, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, VK_SHADER_STAGE_RAYGEN_BIT_KHR)
-        .AddBinding(2, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_RAYGEN_BIT_KHR)
-        .Build();
-
-    auto storageImage = std::make_shared<RHI::Image>(m_Device, RHI::Image::Spec {
-        .extent = { window->GetWidth(), window->GetHeight(), 1 },
-        .format = VK_FORMAT_R32G32B32A32_SFLOAT,
-        .usage = VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT,
-        .memory = VMA_MEMORY_USAGE_GPU_ONLY
-    });
-
-    auto storageSampler = std::make_shared<RHI::Sampler>(m_Device, RHI::Sampler::Spec {
-        .magFilter = VK_FILTER_LINEAR,
-        .minFilter = VK_FILTER_LINEAR,
-        .addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT,
-        .addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT,
-        .addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT,
-        .maxAnisotropy = m_Device->GetProps().properties.limits.maxSamplerAnisotropy,
-        .borderColor = VK_BORDER_COLOR_INT_OPAQUE_BLACK
-    });
-
-    m_StorageTexture = std::make_unique<RHI::Texture>(storageImage, storageSampler);
-    m_BindlessHeap->RegisterTexture(*m_StorageTexture);
+    m_StorageTexture = std::make_unique<RHI::Texture>(
+        std::make_shared<RHI::Image>(m_Device, RHI::Image::Spec {
+            .extent = { window->GetWidth(), window->GetHeight(), 1 },
+            .format = VK_FORMAT_R32G32B32A32_SFLOAT,
+            .usage = VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT,
+            .memory = VMA_MEMORY_USAGE_GPU_ONLY
+        }),
+        std::make_shared<RHI::Sampler>(m_Device, RHI::Sampler::Spec {
+            .magFilter = VK_FILTER_LINEAR,
+            .minFilter = VK_FILTER_LINEAR,
+            .addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT,
+            .addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT,
+            .addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT,
+            .maxAnisotropy = m_Device->GetProps().properties.limits.maxSamplerAnisotropy,
+            .borderColor = VK_BORDER_COLOR_INT_OPAQUE_BLACK
+        })
+    );
 
     m_CameraBuffer = std::make_unique<RHI::Buffer>(m_Device, RHI::Buffer::Spec {
         .size = sizeof(Scene::CameraData),
@@ -52,13 +49,20 @@ Renderer::Renderer(const std::shared_ptr<Window>& window)
         .memory = VMA_MEMORY_USAGE_CPU_TO_GPU
     });
 
-    std::filesystem::path shaderPath = PathConfig::ShaderDir;
+    m_BindlessHeap = std::make_unique<RHI::BindlessHeap>(m_Device);
+    m_BindlessHeap->RegisterTexture(*m_StorageTexture);
+
+    m_DrawLayout = RHI::DescriptorLayoutBuilder(m_Device)
+        .AddBinding(0, VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR, VK_SHADER_STAGE_RAYGEN_BIT_KHR)
+        .AddBinding(1, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, VK_SHADER_STAGE_RAYGEN_BIT_KHR)
+        .AddBinding(2, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_RAYGEN_BIT_KHR)
+        .Build();
 
     std::vector<VkFormat> colorFormats = { m_Swapchain->GetFormat() };
 
     m_GraphicsPipeline = RHI::GraphicsPipelineBuilder(m_Device)
-        .SetVertexShader(shaderPath / "post.vert.spv")
-        .SetFragmentShader(shaderPath / "post.frag.spv")
+        .SetVertexShader(s_ShaderPath / "post.vert.spv")
+        .SetFragmentShader(s_ShaderPath / "post.frag.spv")
         .SetColorFormats(colorFormats)
         .SetDepthTest(false, false)
         .SetDepthFormat(VK_FORMAT_UNDEFINED)
@@ -70,9 +74,9 @@ Renderer::Renderer(const std::shared_ptr<Window>& window)
         .Build();
 
     m_RayTracingPipeline = RHI::RayTracingPipelineBuilder(m_Device)
-        .AddRayGenShader(shaderPath / "raygen.rgen.spv")
-        .AddMissShader(shaderPath / "miss.rmiss.spv")
-        .AddClosestHitShader(shaderPath / "closesthit.rchit.spv")
+        .AddRayGenShader(s_ShaderPath / "raygen.rgen.spv")
+        .AddMissShader(s_ShaderPath / "miss.rmiss.spv")
+        .AddClosestHitShader(s_ShaderPath / "closesthit.rchit.spv")
         .AddLayout(m_BindlessHeap->GetLayout())
         .AddLayout(m_DrawLayout)
         .Build();
@@ -91,11 +95,11 @@ void Renderer::Draw(Scene::CameraData&& cam)
 {
     m_Device->SyncFrame();
 
-    m_CameraBuffer->Write(&cam, sizeof(Scene::CameraData));
-
     if (auto result = m_Swapchain->AcquireNextImage()) {
         if (*result == VK_ERROR_OUT_OF_DATE_KHR) RecreateSwapchain();
     }
+
+    m_CameraBuffer->Write(&cam, sizeof(Scene::CameraData));
 
     VkCommandBuffer computeCmd = m_ComputeCommand->Record([&](VkCommandBuffer cmd) {
         auto storageImage = m_StorageTexture->GetImage();
@@ -219,9 +223,7 @@ void Renderer::Draw(Scene::CameraData&& cam)
 
 void Renderer::LoadScene()
 {
-    std::filesystem::path assetPath = PathConfig::AssetDir;
-
-    auto model = Scene::GlTFLoader::Load(assetPath / "Suzanne.glb");
+    auto model = Scene::GlTFLoader::Load(s_AssetPath / "Suzanne.glb");
 
     m_VertexBuffer = std::make_unique<RHI::Buffer>(m_Device, RHI::Buffer::Spec {
         .size = model->vertices.size() * sizeof(Scene::Vertex),
