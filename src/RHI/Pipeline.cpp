@@ -5,15 +5,6 @@
 
 namespace RHI {
 
-    namespace {
-
-        u32 AlignUp(u32 value, u32 alignment)
-        {
-            return (value + alignment - 1) & ~(alignment - 1);
-        }
-    
-    }
-
     Pipeline::Pipeline(const std::shared_ptr<Device>& device)
         : m_Device(device)
     {

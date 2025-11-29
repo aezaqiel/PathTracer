@@ -251,7 +251,7 @@ void Renderer::Draw(Scene::CameraData&& cam)
 
 void Renderer::LoadScene()
 {
-    auto model = Scene::GlTFLoader::Load(s_AssetPath / "Suzanne.glb");
+    auto model = Scene::GlTFLoader::Load(s_AssetPath / "Sponza.glb");
 
     m_VertexBuffer = std::make_unique<RHI::Buffer>(m_Device, RHI::Buffer::Spec {
         .size = model->vertices.size() * sizeof(Scene::Vertex),

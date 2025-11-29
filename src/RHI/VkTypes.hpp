@@ -47,6 +47,11 @@
             }
         }
 
+        u32 AlignUp(u32 value, u32 alignment)
+        {
+            return (value + alignment - 1) & ~(alignment - 1);
+        }
+
     }
 
     #define VK_CHECK(expr) do { VkResult result_ = (expr); if (result_ != VK_SUCCESS) { LOG_FATAL("VK_CHECK Failed: {} returned {} at {}:{}", #expr, VkResultToString(result_), __FILE__, __LINE__); } } while (false)

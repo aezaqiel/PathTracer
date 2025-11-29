@@ -27,6 +27,7 @@ namespace RHI {
 
         inline VkPhysicalDeviceProperties2 GetProps() const { return m_Props; }
         inline VkPhysicalDeviceRayTracingPipelinePropertiesKHR GetRTProps() const { return m_RTProps; }
+        inline VkPhysicalDeviceAccelerationStructurePropertiesKHR GetASProps() const { return m_ASProps; }
 
         inline void WaitIdle() const { vkDeviceWaitIdle(m_Device); }
 
@@ -184,6 +185,7 @@ namespace RHI {
 
         VkPhysicalDeviceProperties2 m_Props;
         VkPhysicalDeviceRayTracingPipelinePropertiesKHR m_RTProps;
+        VkPhysicalDeviceAccelerationStructurePropertiesKHR m_ASProps;
 
         QueueFamilyIndices m_QueueFamily;
         VkQueue m_GraphicsQueue { VK_NULL_HANDLE };

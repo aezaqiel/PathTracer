@@ -62,8 +62,11 @@ namespace RHI {
             m_PhysicalDevice = scoredDevices.rbegin()->second;
             m_QueueFamily = FindQueueFamilyIndices(m_PhysicalDevice);
 
+            m_ASProps.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ACCELERATION_STRUCTURE_PROPERTIES_KHR;
+            m_ASProps.pNext = nullptr;
+
             m_RTProps.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_PIPELINE_PROPERTIES_KHR;
-            m_RTProps.pNext = nullptr;
+            m_RTProps.pNext = &m_ASProps;
 
             m_Props.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2;
             m_Props.pNext = &m_RTProps;

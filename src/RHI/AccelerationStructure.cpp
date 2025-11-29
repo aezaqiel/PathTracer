@@ -94,8 +94,10 @@ namespace RHI {
 
         vkGetAccelerationStructureBuildSizesKHR(m_Device->GetDevice(), VK_ACCELERATION_STRUCTURE_BUILD_TYPE_DEVICE_KHR, &buildInfo, maxPrimitiveCounts.data(), &sizeInfo);
 
+        u32 scratchAlignment = m_Device->GetASProps().minAccelerationStructureScratchOffsetAlignment;
+
         m_Buffer = std::make_unique<Buffer>(m_Device, Buffer::Spec {
-            .size = sizeInfo.accelerationStructureSize,
+            .size = sizeInfo.accelerationStructureSize + scratchAlignment,
             .usage = VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_STORAGE_BIT_KHR | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
             .memory = VMA_MEMORY_USAGE_GPU_ONLY
         });
@@ -119,7 +121,7 @@ namespace RHI {
         });
 
         buildInfo.dstAccelerationStructure = m_AS;
-        buildInfo.scratchData.deviceAddress = scratch.GetDeviceAddress();
+        buildInfo.scratchData.deviceAddress = AlignUp(scratch.GetDeviceAddress(), scratchAlignment);
 
         VkCommandBuffer cmdBuffer = queue.Record([&](VkCommandBuffer cmd) {
             const VkAccelerationStructureBuildRangeInfoKHR* pRanges = ranges.data();
@@ -269,8 +271,10 @@ namespace RHI {
 
         vkGetAccelerationStructureBuildSizesKHR(m_Device->GetDevice(), VK_ACCELERATION_STRUCTURE_BUILD_TYPE_DEVICE_KHR, &buildInfo, &count, &sizeInfo);
 
+        u32 scratchAlignment = m_Device->GetASProps().minAccelerationStructureScratchOffsetAlignment;
+
         m_Buffer = std::make_unique<Buffer>(m_Device, Buffer::Spec {
-            .size = sizeInfo.accelerationStructureSize,
+            .size = sizeInfo.accelerationStructureSize + scratchAlignment,
             .usage = VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_STORAGE_BIT_KHR | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
             .memory = VMA_MEMORY_USAGE_GPU_ONLY
         });
@@ -295,7 +299,7 @@ namespace RHI {
         });
 
         buildInfo.dstAccelerationStructure = m_AS;
-        buildInfo.scratchData.deviceAddress = scratch.GetDeviceAddress();
+        buildInfo.scratchData.deviceAddress = AlignUp(scratch.GetDeviceAddress(), scratchAlignment);
 
         VkAccelerationStructureBuildRangeInfoKHR rangeInfo {
             .primitiveCount = count,
