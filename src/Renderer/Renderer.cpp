@@ -21,10 +21,12 @@ Renderer::Renderer(const std::shared_ptr<Window>& window)
     m_ComputeCommand = std::make_unique<RHI::CommandContext<RHI::QueueType::Compute>>(m_Device);
     m_TransferCommand = std::make_unique<RHI::CommandContext<RHI::QueueType::Transfer>>(m_Device);
 
-    m_DescriptorManager = std::make_shared<RHI::DescriptorManager>(m_Device);
-    for (auto& allocator : m_DescriptorAllocators) {
-        allocator = std::make_unique<RHI::DescriptorAllocator>(m_Device);
-    }
+    m_BindlessHeap = std::make_unique<RHI::BindlessHeap>(m_Device);
+
+    m_DrawLayout = RHI::DescriptorLayoutBuilder(m_Device)
+        .AddBinding(0, VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR, VK_SHADER_STAGE_RAYGEN_BIT_KHR)
+        .AddBinding(1, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, VK_SHADER_STAGE_RAYGEN_BIT_KHR)
+        .Build();
 
     auto storageImage = std::make_shared<RHI::Image>(m_Device, RHI::Image::Spec {
         .extent = { window->GetWidth(), window->GetHeight(), 1 },
@@ -44,13 +46,11 @@ Renderer::Renderer(const std::shared_ptr<Window>& window)
     });
 
     m_StorageTexture = std::make_unique<RHI::Texture>(storageImage, storageSampler);
-
-    m_DescriptorManager->UpdateStorageImage(2, storageImage->GetView(), VK_IMAGE_LAYOUT_GENERAL);
-    m_DescriptorManager->RegisterTexture(*m_StorageTexture, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+    m_BindlessHeap->RegisterTexture(*m_StorageTexture);
 
     std::vector<VkFormat> colorFormats = { m_Swapchain->GetFormat() };
 
-    m_GraphicsPipeline = RHI::GraphicsPipelineBuilder(m_Device, m_DescriptorManager)
+    m_GraphicsPipeline = RHI::GraphicsPipelineBuilder(m_Device)
         .SetVertexShader(shaderPath / "post.vert.spv")
         .SetFragmentShader(shaderPath / "post.frag.spv")
         .SetColorFormats(colorFormats)
@@ -59,13 +59,16 @@ Renderer::Renderer(const std::shared_ptr<Window>& window)
         .SetInputTopology(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST)
         .SetPolygonMode(VK_POLYGON_MODE_FILL)
         .SetCullMode(VK_CULL_MODE_NONE)
-        .AddPushConstant(sizeof(u32) * 2, VK_SHADER_STAGE_FRAGMENT_BIT)
+        .AddLayout(m_BindlessHeap->GetLayout())
+        .AddPushConstant(sizeof(u32), VK_SHADER_STAGE_FRAGMENT_BIT)
         .Build();
 
-    m_RayTracingPipeline = RHI::RayTracingPipelineBuilder(m_Device, m_DescriptorManager)
+    m_RayTracingPipeline = RHI::RayTracingPipelineBuilder(m_Device)
         .AddRayGenShader(shaderPath / "raygen.rgen.spv")
         .AddMissShader(shaderPath / "miss.rmiss.spv")
         .AddClosestHitShader(shaderPath / "closesthit.rchit.spv")
+        .AddLayout(m_BindlessHeap->GetLayout())
+        .AddLayout(m_DrawLayout)
         .Build();
 
     auto model = Scene::GlTFLoader::Load(assetPath / "Suzanne.glb");
@@ -126,21 +129,18 @@ Renderer::Renderer(const std::shared_ptr<Window>& window)
     }
 
     m_TLAS = std::make_unique<RHI::TLAS>(m_Device, *m_ComputeCommand, tlasInstances);
-
-    m_DescriptorManager->UpdateTLAS(3, m_TLAS->GetAS());
 }
 
 Renderer::~Renderer()
 {
     m_Device->WaitIdle();
+
+    vkDestroyDescriptorSetLayout(m_Device->GetDevice(), m_DrawLayout, nullptr);
 }
 
 void Renderer::Draw()
 {
     m_Device->SyncFrame();
-
-    auto& allocator = m_DescriptorAllocators[m_Device->GetCurrentFrameIndex()];
-    allocator->Reset();
 
     if (auto result = m_Swapchain->AcquireNextImage()) {
         if (*result == VK_ERROR_OUT_OF_DATE_KHR) RecreateSwapchain();
@@ -158,7 +158,12 @@ void Renderer::Draw()
         );
 
         m_RayTracingPipeline->Bind(cmd);
-        m_DescriptorManager->Bind(cmd, VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR, m_RayTracingPipeline->GetLayout());
+        m_BindlessHeap->Bind(cmd, VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR, m_RayTracingPipeline->GetLayout());
+
+        RHI::DescriptorWriter()
+            .WriteAS(0, m_TLAS->GetAS())
+            .WriteImage(1, m_StorageTexture->GetImage()->GetView(), VK_NULL_HANDLE, VK_IMAGE_LAYOUT_GENERAL, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE)
+            .Push(cmd, VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR, m_RayTracingPipeline->GetLayout(), 1);
 
         auto rgen = m_RayTracingPipeline->GetRGenRegion();
         auto miss = m_RayTracingPipeline->GetMissRegion();
@@ -210,7 +215,7 @@ void Renderer::Draw()
         vkCmdBeginRendering(cmd, &renderingInfo);
 
         m_GraphicsPipeline->Bind(cmd);
-        m_DescriptorManager->Bind(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, m_GraphicsPipeline->GetLayout());
+        m_BindlessHeap->Bind(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, m_GraphicsPipeline->GetLayout());
 
         m_GraphicsPipeline->SetViewport(cmd, VkViewport {
             .x = 0.0f, .y = 0.0f,
@@ -226,10 +231,8 @@ void Renderer::Draw()
         });
 
         u32 storageImageIndex = m_StorageTexture->GetImageIndex();
-        u32 storageSamplerIndex = m_StorageTexture->GetSamplerIndex();
 
         vkCmdPushConstants(cmd, m_GraphicsPipeline->GetLayout(), VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(u32), &storageImageIndex);
-        vkCmdPushConstants(cmd, m_GraphicsPipeline->GetLayout(), VK_SHADER_STAGE_FRAGMENT_BIT, sizeof(u32), sizeof(u32), &storageSamplerIndex);
 
         vkCmdDraw(cmd, 3, 1, 0, 0);
 

@@ -1,9 +1,11 @@
 #include "DescriptorManager.hpp"
 
 #include "Device.hpp"
+#include "Buffer.hpp"
 #include "Image.hpp"
 #include "Sampler.hpp"
 #include "Texture.hpp"
+#include "AccelerationStructure.hpp"
 
 namespace RHI {
 
@@ -12,16 +14,36 @@ namespace RHI {
     {
     }
 
-    DescriptorLayoutBuilder& DescriptorLayoutBuilder::AddBinding(u32 binding, VkDescriptorType type, u32 count, VkShaderStageFlags stage, VkDescriptorBindingFlags flag)
+    DescriptorLayoutBuilder& DescriptorLayoutBuilder::AddBinding(u32 binding, VkDescriptorType type, VkShaderStageFlags stage, u32 count)
     {
-        bindings.push_back(VkDescriptorSetLayoutBinding {
+        m_Bindings.push_back(VkDescriptorSetLayoutBinding {
             .binding = binding,
             .descriptorType = type,
             .descriptorCount = count,
             .stageFlags = stage,
             .pImmutableSamplers = nullptr
         });
-        flags.push_back(flag);
+
+        m_BindingFlags.push_back(0);
+
+        return *this;
+    }
+
+    DescriptorLayoutBuilder& DescriptorLayoutBuilder::AddBindlessBinding(u32 binding, VkDescriptorType type, VkShaderStageFlags stage, u32 count)
+    {
+        m_Bindings.push_back(VkDescriptorSetLayoutBinding {
+            .binding = binding,
+            .descriptorType = type,
+            .descriptorCount = count,
+            .stageFlags = stage,
+            .pImmutableSamplers = nullptr
+        });
+
+        m_BindingFlags.push_back(
+            VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT |
+            VK_DESCRIPTOR_BINDING_UPDATE_AFTER_BIND_BIT |
+            VK_DESCRIPTOR_BINDING_VARIABLE_DESCRIPTOR_COUNT_BIT
+        );
 
         return *this;
     }
@@ -31,16 +53,31 @@ namespace RHI {
         VkDescriptorSetLayoutBindingFlagsCreateInfo flagsInfo {
             .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_BINDING_FLAGS_CREATE_INFO,
             .pNext = nullptr,
-            .bindingCount = static_cast<u32>(flags.size()),
-            .pBindingFlags = flags.data()
+            .bindingCount = static_cast<u32>(m_BindingFlags.size()),
+            .pBindingFlags = m_BindingFlags.data()
         };
+
+        bool push = true;
+
+        VkDescriptorSetLayoutCreateFlags layoutFlags = 0;
+        for (auto flag : m_BindingFlags) {
+            if (flag & VK_DESCRIPTOR_BINDING_UPDATE_AFTER_BIND_BIT) {
+                layoutFlags |= VK_DESCRIPTOR_SET_LAYOUT_CREATE_UPDATE_AFTER_BIND_POOL_BIT;
+                push = false;
+                break;
+            }
+        }
+
+        if (push) {
+            layoutFlags |= VK_DESCRIPTOR_SET_LAYOUT_CREATE_PUSH_DESCRIPTOR_BIT;
+        }
 
         VkDescriptorSetLayoutCreateInfo info {
             .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
             .pNext = &flagsInfo,
-            .flags = VK_DESCRIPTOR_SET_LAYOUT_CREATE_UPDATE_AFTER_BIND_POOL_BIT,
-            .bindingCount = static_cast<u32>(bindings.size()),
-            .pBindings = bindings.data()
+            .flags = layoutFlags,
+            .bindingCount = static_cast<u32>(m_Bindings.size()),
+            .pBindings = m_Bindings.data()
         };
 
         VkDescriptorSetLayout layout = VK_NULL_HANDLE;
@@ -49,9 +86,17 @@ namespace RHI {
         return layout;
     }
 
-    DescriptorAllocator::DescriptorAllocator(const std::shared_ptr<Device>& device)
-        : m_Device(device)
+    DescriptorAllocator::DescriptorAllocator(const std::shared_ptr<Device>& device, u32 sets, std::span<PoolSizeRatio> ratios)
+        : m_Device(device), m_SetsPerPool(sets)
     {
+        if (ratios.empty()) {
+            m_Ratios.push_back({ VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1.0f });
+            m_Ratios.push_back({ VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1.0f });
+            m_Ratios.push_back({ VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1.0f });
+            m_Ratios.push_back({ VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR, 1.0f });
+        } else {
+            m_Ratios.assign(ratios.begin(), ratios.end());
+        }
     }
 
     DescriptorAllocator::~DescriptorAllocator()
@@ -60,101 +105,211 @@ namespace RHI {
             vkDestroyDescriptorPool(m_Device->GetDevice(), m_CurrentPool, nullptr);
         }
 
-        for (auto pool : m_UsedPools) {
-            vkDestroyDescriptorPool(m_Device->GetDevice(), pool, nullptr);
+        for (auto p : m_UsedPools) {
+            vkDestroyDescriptorPool(m_Device->GetDevice(), p, nullptr);
         }
 
-        for (auto pool : m_FreePools) {
-            vkDestroyDescriptorPool(m_Device->GetDevice(), pool, nullptr);
+        for (auto p : m_FreePools) {
+            vkDestroyDescriptorPool(m_Device->GetDevice(), p, nullptr);
         }
     }
 
-    bool DescriptorAllocator::Allocate(VkDescriptorSetLayout layout, VkDescriptorSet& set)
+    VkDescriptorSet DescriptorAllocator::Allocate(VkDescriptorSetLayout layout)
     {
-        if (m_CurrentPool == VK_NULL_HANDLE) {
-            m_CurrentPool = GrabPool();
-            m_UsedPools.push_back(m_CurrentPool);
-        }
+        VkDescriptorPool pool = GetPool();
 
         VkDescriptorSetAllocateInfo allocateInfo {
             .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
             .pNext = nullptr,
-            .descriptorPool = m_CurrentPool,
+            .descriptorPool = pool,
             .descriptorSetCount = 1,
             .pSetLayouts = &layout
         };
 
+        VkDescriptorSet set = VK_NULL_HANDLE;
         VkResult result = vkAllocateDescriptorSets(m_Device->GetDevice(), &allocateInfo, &set);
 
-        switch (result) {
-            case VK_SUCCESS: return true;
-            case VK_ERROR_FRAGMENTED_POOL:
-            case VK_ERROR_OUT_OF_POOL_MEMORY:
-                break;
-            default:
-                return false;
+        if (result == VK_ERROR_OUT_OF_POOL_MEMORY || result == VK_ERROR_FRAGMENTED_POOL) {
+            m_UsedPools.push_back(pool);
+            m_CurrentPool = VK_NULL_HANDLE;
+
+            return Allocate(layout);
         }
 
-        m_CurrentPool = GrabPool();
-        m_UsedPools.push_back(m_CurrentPool);
-
-        allocateInfo.descriptorPool = m_CurrentPool;
-        VK_CHECK(vkAllocateDescriptorSets(m_Device->GetDevice(), &allocateInfo, &set));
-
-        return true;
+        VK_CHECK(result);
+        return set;
     }
 
     void DescriptorAllocator::Reset()
     {
-        for (auto pool : m_UsedPools) {
-            vkResetDescriptorPool(m_Device->GetDevice(), pool, 0);
-            m_FreePools.push_back(pool);
+        for (auto p : m_UsedPools) {
+            vkResetDescriptorPool(m_Device->GetDevice(), p, 0);
+            m_FreePools.push_back(p);
         }
 
         m_UsedPools.clear();
-        m_CurrentPool = VK_NULL_HANDLE;
+
+        if (m_CurrentPool != VK_NULL_HANDLE) {
+            vkResetDescriptorPool(m_Device->GetDevice(), m_CurrentPool, 0);
+            m_FreePools.push_back(m_CurrentPool);
+            m_CurrentPool = VK_NULL_HANDLE;
+        }
     }
 
-    VkDescriptorPool DescriptorAllocator::GrabPool()
+    VkDescriptorPool DescriptorAllocator::GetPool()
     {
-        if (!m_FreePools.empty()) {
-            VkDescriptorPool pool = m_FreePools.back();
-            m_FreePools.pop_back();
-            return pool;
+        if (m_CurrentPool != VK_NULL_HANDLE) {
+            return m_CurrentPool;
         }
 
-        std::vector<VkDescriptorPoolSize> sizes = {
-            { VK_DESCRIPTOR_TYPE_SAMPLER, 500 },
-            { VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1000 },
-            { VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, 4000 },
-            { VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1000 },
-            { VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER, 1000 },
-            { VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER, 1000 },
-            { VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 2000 },
-            { VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 2000 },
-            { VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, 1000 },
-            { VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC, 1000 },
-            { VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT, 500 }
-        };
+        if (!m_FreePools.empty()) {
+            m_CurrentPool = m_FreePools.back();
+            m_FreePools.pop_back();
+        } else {
+            m_CurrentPool = CreatePool(m_SetsPerPool, 0);
+        }
 
-        VkDescriptorPoolCreateInfo poolInfo {
+        return m_CurrentPool;
+    }
+
+    VkDescriptorPool DescriptorAllocator::CreatePool(u32 count, VkDescriptorPoolCreateFlags flags)
+    {
+        std::vector<VkDescriptorPoolSize> sizes;
+        sizes.reserve(m_Ratios.size());
+
+        for (auto ratio : m_Ratios) {
+            sizes.push_back({ ratio.type, static_cast<u32>(ratio.ratio * count) });
+        }
+
+        VkDescriptorPoolCreateInfo info {
             .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
             .pNext = nullptr,
-            .flags = 0,
-            .maxSets = 1000,
+            .flags = flags,
+            .maxSets = count,
             .poolSizeCount = static_cast<u32>(sizes.size()),
             .pPoolSizes = sizes.data()
         };
 
         VkDescriptorPool pool = VK_NULL_HANDLE;
-        VK_CHECK(vkCreateDescriptorPool(m_Device->GetDevice(), &poolInfo, nullptr, &pool));
+        VK_CHECK(vkCreateDescriptorPool(m_Device->GetDevice(), &info, nullptr, &pool));
 
         return pool;
     }
 
-    DescriptorWriter::DescriptorWriter(const std::shared_ptr<Device>& device)
+    BindlessHeap::BindlessHeap(const std::shared_ptr<Device>& device)
         : m_Device(device)
     {
+        m_Layout = DescriptorLayoutBuilder(m_Device)
+            .AddBindlessBinding(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_ALL, MAX_BINDLESS_RESOURCES)
+            .Build();
+
+        VkDescriptorPoolSize poolSize {
+            .type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+            .descriptorCount = MAX_BINDLESS_RESOURCES
+        };
+
+        VkDescriptorPoolCreateInfo poolInfo {
+            .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
+            .pNext = nullptr,
+            .flags = VK_DESCRIPTOR_POOL_CREATE_UPDATE_AFTER_BIND_BIT,
+            .maxSets = 1,
+            .poolSizeCount = 1,
+            .pPoolSizes = &poolSize
+        };
+
+        VK_CHECK(vkCreateDescriptorPool(device->GetDevice(), &poolInfo, nullptr, &m_Pool));
+
+        u32 maxBinding = MAX_BINDLESS_RESOURCES - 1;
+        VkDescriptorSetVariableDescriptorCountAllocateInfo variableInfo {
+            .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_VARIABLE_DESCRIPTOR_COUNT_ALLOCATE_INFO,
+            .pNext = nullptr,
+            .descriptorSetCount = 1,
+            .pDescriptorCounts = &maxBinding
+        };
+
+        VkDescriptorSetAllocateInfo allocateInfo {
+            .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
+            .pNext = &variableInfo,
+            .descriptorPool = m_Pool,
+            .descriptorSetCount = 1,
+            .pSetLayouts = &m_Layout
+        };
+
+        VK_CHECK(vkAllocateDescriptorSets(device->GetDevice(), &allocateInfo, &m_Set));
+
+        for (u32 i = 0; i < MAX_BINDLESS_RESOURCES; ++i) {
+            m_FreeIndices.push(i);
+        }
+    }
+
+    BindlessHeap::~BindlessHeap()
+    {
+        vkDestroyDescriptorPool(m_Device->GetDevice(), m_Pool, nullptr);
+        vkDestroyDescriptorSetLayout(m_Device->GetDevice(), m_Layout, nullptr);
+    }
+
+    u32 BindlessHeap::RegisterTexture(const Texture& texture)
+    {
+        u32 index = AllocateIndex();
+        if (index == std::numeric_limits<u32>::max()) return 0;
+
+        UpdateTexture(index, texture);
+        return index;
+    }
+
+    void BindlessHeap::UnregisterTexture(u32 index)
+    {
+        FreeIndex(index);
+    }
+
+    void BindlessHeap::Bind(VkCommandBuffer cmd, VkPipelineBindPoint bind, VkPipelineLayout layout)
+    {
+        vkCmdBindDescriptorSets(cmd, bind, layout, 0, 1, &m_Set, 0, nullptr);
+    }
+
+    u32 BindlessHeap::AllocateIndex()
+    {
+        std::scoped_lock<std::mutex> lock(m_AllocationMutex);
+
+        if (m_FreeIndices.empty()) {
+            LOG_ERROR("Bindless heap full");
+            return std::numeric_limits<u32>::max();
+        }
+
+        u32 index = m_FreeIndices.front();
+        m_FreeIndices.pop();
+
+        return index;
+    }
+
+    void BindlessHeap::FreeIndex(u32 index)
+    {
+        std::scoped_lock<std::mutex> lock(m_AllocationMutex);
+        m_FreeIndices.push(index);
+    }
+
+    void BindlessHeap::UpdateTexture(u32 index, const Texture& texture)
+    {
+        VkDescriptorImageInfo imageInfo {
+            .sampler = texture.GetSampler()->GetSampler(),
+            .imageView = texture.GetImage()->GetView(),
+            .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
+        };
+
+        VkWriteDescriptorSet write {
+            .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+            .pNext = nullptr,
+            .dstSet = m_Set,
+            .dstBinding = 0,
+            .dstArrayElement = index,
+            .descriptorCount = 1,
+            .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+            .pImageInfo = &imageInfo,
+            .pBufferInfo = nullptr,
+            .pTexelBufferView = nullptr
+        };
+
+        vkUpdateDescriptorSets(m_Device->GetDevice(), 1, &write, 0, nullptr);
     }
 
     DescriptorWriter& DescriptorWriter::WriteImage(u32 binding, VkImageView view, VkSampler sampler, VkImageLayout layout, VkDescriptorType type)
@@ -232,225 +387,14 @@ namespace RHI {
         return *this;
     }
 
-    bool DescriptorWriter::Build(VkDescriptorSet& set, VkDescriptorSetLayout layout, DescriptorAllocator& allocator)
+    void DescriptorWriter::Push(VkCommandBuffer cmd, VkPipelineBindPoint bind, VkPipelineLayout layout, u32 set)
     {
-        if (!allocator.Allocate(layout, set)) {
-            return false;
-        }
-
-        Overwrite(set);
-        return true;
-    }
-
-    void DescriptorWriter::Overwrite(VkDescriptorSet set)
-    {
-        for (auto& write : m_Writes) {
-            write.dstSet = set;
-        }
-
-        vkUpdateDescriptorSets(m_Device->GetDevice(), static_cast<u32>(m_Writes.size()), m_Writes.data(), 0, nullptr);
-    }
-
-    DescriptorManager::DescriptorManager(const std::shared_ptr<Device>& device)
-        : m_Device(device)
-    {
-        m_Allocator = std::make_unique<DescriptorAllocator>(m_Device);
-
-        m_Layout = DescriptorLayoutBuilder(m_Device)
-            .AddBinding(0, VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, s_MaxBindlessTextures, VK_SHADER_STAGE_ALL, VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT | VK_DESCRIPTOR_BINDING_UPDATE_AFTER_BIND_BIT)
-            .AddBinding(1, VK_DESCRIPTOR_TYPE_SAMPLER, s_MaxBindlessSamplers, VK_SHADER_STAGE_ALL, VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT | VK_DESCRIPTOR_BINDING_UPDATE_AFTER_BIND_BIT)
-            .AddBinding(2, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1, VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_COMPUTE_BIT)
-            .AddBinding(3, VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR, 1, VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR)
-            .Build();
-
-        std::vector<VkDescriptorPoolSize> sizes = {
-            { VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, s_MaxBindlessTextures },
-            { VK_DESCRIPTOR_TYPE_SAMPLER, s_MaxBindlessSamplers },
-            { VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1 },
-            { VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR, 1 }
-        };
-
-        VkDescriptorPoolCreateInfo poolInfo {
-            .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
-            .pNext = nullptr,
-            .flags = VK_DESCRIPTOR_POOL_CREATE_UPDATE_AFTER_BIND_BIT,
-            .maxSets = 1,
-            .poolSizeCount = static_cast<u32>(sizes.size()),
-            .pPoolSizes = sizes.data()
-        };
-
-        VK_CHECK(vkCreateDescriptorPool(m_Device->GetDevice(), &poolInfo, nullptr, &m_Pool));
-
-        VkDescriptorSetAllocateInfo allocateInfo {
-            .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
-            .pNext = nullptr,
-            .descriptorPool = m_Pool,
-            .descriptorSetCount = 1,
-            .pSetLayouts = &m_Layout
-        };
-
-        VK_CHECK(vkAllocateDescriptorSets(m_Device->GetDevice(), &allocateInfo, &m_Set));
-
-        for (u32 i = 0; i < s_MaxBindlessTextures; ++i) m_FreeTextureIndices.push(i);
-        for (u32 i = 0; i < s_MaxBindlessSamplers; ++i) m_FreeSamplerIndices.push(i);
-    }
-
-    DescriptorManager::~DescriptorManager()
-    {
-        vkDestroyDescriptorPool(m_Device->GetDevice(), m_Pool, nullptr);
-        vkDestroyDescriptorSetLayout(m_Device->GetDevice(), m_Layout, nullptr);
-    }
-
-    void DescriptorManager::RegisterTexture(Texture& texture, VkImageLayout layout)
-    {
-        u32 image = RegisterImage(*texture.GetImage(), layout);
-        u32 sampler = RegisterSampler(*texture.GetSampler());
-
-        texture.SetBindlessIndices(image, sampler);
-    }
-
-    void DescriptorManager::UnregisterTexture(const Texture& texture)
-    {
-        UnregisterSampler(texture.GetSamplerIndex());
-        UnregisterImage(texture.GetImageIndex());
-    }
-
-    void DescriptorManager::Bind(VkCommandBuffer cmd, VkPipelineBindPoint bind, VkPipelineLayout layout, u32 index)
-    {
-        vkCmdBindDescriptorSets(cmd, bind, layout, index, 1, &m_Set, 0, nullptr);
-    }
-
-    void DescriptorManager::UpdateStorageImage(u32 binding, VkImageView view, VkImageLayout layout)
-    {
-        VkDescriptorImageInfo imageInfo {
-            .sampler = VK_NULL_HANDLE,
-            .imageView = view,
-            .imageLayout = layout
-        };
-
-        VkWriteDescriptorSet write {
-            .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-            .pNext = nullptr,
-            .dstSet = m_Set,
-            .dstBinding = binding,
-            .dstArrayElement = 0,
-            .descriptorCount = 1,
-            .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
-            .pImageInfo = &imageInfo,
-            .pBufferInfo = nullptr,
-            .pTexelBufferView = nullptr
-        };
-
-        vkUpdateDescriptorSets(m_Device->GetDevice(), 1, &write, 0, nullptr);
-    }
-
-    void DescriptorManager::UpdateTLAS(u32 binding, VkAccelerationStructureKHR tlas)
-    {
-        VkWriteDescriptorSetAccelerationStructureKHR asInfo {
-            .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET_ACCELERATION_STRUCTURE_KHR,
-            .pNext = nullptr,
-            .accelerationStructureCount = 1,
-            .pAccelerationStructures = &tlas
-        };
-
-        VkWriteDescriptorSet write {
-            .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-            .pNext = &asInfo,
-            .dstSet = m_Set,
-            .dstBinding = binding,
-            .dstArrayElement = 0,
-            .descriptorCount = 1,
-            .descriptorType = VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR,
-            .pImageInfo = nullptr,
-            .pBufferInfo = nullptr,
-            .pTexelBufferView = nullptr
-        };
-
-        vkUpdateDescriptorSets(m_Device->GetDevice(), 1, &write, 0, nullptr);
-    }
-
-    u32 DescriptorManager::RegisterImage(Image& image, VkImageLayout layout)
-    {
-        std::scoped_lock lock(m_TextureMutex);
-
-        if (m_FreeTextureIndices.empty()) {
-            LOG_ERROR("Bindless texture heap ran out of indices");
-            return 0;
-        }
-
-        u32 index = m_FreeTextureIndices.front();
-        m_FreeTextureIndices.pop();
-
-        VkDescriptorImageInfo imageInfo {
-            .sampler = VK_NULL_HANDLE,
-            .imageView = image.GetView(),
-            .imageLayout = layout
-        };
-
-        VkWriteDescriptorSet write {
-            .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-            .pNext = nullptr,
-            .dstSet = m_Set,
-            .dstBinding = 0,
-            .dstArrayElement = index,
-            .descriptorCount = 1,
-            .descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
-            .pImageInfo = &imageInfo,
-            .pBufferInfo = nullptr,
-            .pTexelBufferView = nullptr
-        };
-
-        vkUpdateDescriptorSets(m_Device->GetDevice(), 1, &write, 0, nullptr);
-
-        return index;
-    }
-
-    void DescriptorManager::UnregisterImage(u32 index)
-    {
-        std::scoped_lock lock(m_TextureMutex);
-        m_FreeTextureIndices.push(index);
-    }
-
-    u32 DescriptorManager::RegisterSampler(Sampler& sampler)
-    {
-        std::scoped_lock lock(m_SamplerMutex);
-
-        if (m_FreeSamplerIndices.empty()) {
-            LOG_ERROR("Bindless Sampler heap ran out of indices");
-            return 0;
-        }
-
-        u32 index = m_FreeSamplerIndices.front();
-        m_FreeSamplerIndices.pop();
-
-        VkDescriptorImageInfo imageInfo {
-            .sampler = sampler.GetSampler(),
-            .imageView = VK_NULL_HANDLE,
-            .imageLayout = VK_IMAGE_LAYOUT_UNDEFINED
-        };
-
-        VkWriteDescriptorSet write {
-            .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-            .pNext = nullptr,
-            .dstSet = m_Set,
-            .dstBinding = 1,
-            .dstArrayElement = index,
-            .descriptorCount = 1,
-            .descriptorType = VK_DESCRIPTOR_TYPE_SAMPLER,
-            .pImageInfo = &imageInfo,
-            .pBufferInfo = nullptr,
-            .pTexelBufferView = nullptr
-        };
-
-        vkUpdateDescriptorSets(m_Device->GetDevice(), 1, &write, 0, nullptr);
-
-        return index;
-    }
-
-    void DescriptorManager::UnregisterSampler(u32 index)
-    {
-        std::scoped_lock lock(m_SamplerMutex);
-        m_FreeSamplerIndices.push(index);
+        vkCmdPushDescriptorSet(cmd, bind, layout, set, static_cast<u32>(m_Writes.size()), m_Writes.data());
+        m_Writes.clear();
+        m_ImageInfos.clear();
+        m_BufferInfos.clear();
+        m_ASInfos.clear();
+        m_ASes.clear();
     }
 
 }

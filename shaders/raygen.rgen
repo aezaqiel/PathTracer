@@ -4,8 +4,8 @@
 
 layout(location = 0) rayPayloadEXT vec3 hitValue;
 
-layout(set = 0, binding = 2, rgba32f) uniform image2D image;
-layout(set = 0, binding = 3) uniform accelerationStructureEXT tlas;
+layout(set = 1, binding = 0) uniform accelerationStructureEXT tlas;
+layout(set = 1, binding = 1, rgba32f) uniform image2D image;
 
 void main()
 {

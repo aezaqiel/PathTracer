@@ -99,7 +99,8 @@ namespace RHI {
             VK_KHR_ACCELERATION_STRUCTURE_EXTENSION_NAME,
             VK_KHR_RAY_TRACING_PIPELINE_EXTENSION_NAME,
             VK_KHR_DEFERRED_HOST_OPERATIONS_EXTENSION_NAME,
-            VK_KHR_SWAPCHAIN_EXTENSION_NAME
+            VK_KHR_SWAPCHAIN_EXTENSION_NAME,
+            VK_KHR_PUSH_DESCRIPTOR_EXTENSION_NAME
         };
 
         VkPhysicalDeviceDescriptorIndexingFeatures descriptorIndexing {
@@ -142,7 +143,7 @@ namespace RHI {
             .accelerationStructureCaptureReplay = VK_FALSE,
             .accelerationStructureIndirectBuild = VK_FALSE,
             .accelerationStructureHostCommands = VK_FALSE,
-            .descriptorBindingAccelerationStructureUpdateAfterBind = VK_FALSE
+            .descriptorBindingAccelerationStructureUpdateAfterBind = VK_TRUE
         };
 
         VkPhysicalDeviceRayTracingPipelineFeaturesKHR raytracing {

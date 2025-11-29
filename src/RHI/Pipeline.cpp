@@ -1,7 +1,6 @@
 #include "Pipeline.hpp"
 
 #include "Device.hpp"
-#include "DescriptorManager.hpp"
 #include "Buffer.hpp"
 
 namespace RHI {
@@ -46,12 +45,9 @@ namespace RHI {
         vkCmdSetScissor(cmd, 0, 1, &scissor);
     }
 
-    GraphicsPipelineBuilder::GraphicsPipelineBuilder(const std::shared_ptr<Device>& device, const std::shared_ptr<DescriptorManager>& descriptor)
+    GraphicsPipelineBuilder::GraphicsPipelineBuilder(const std::shared_ptr<Device>& device)
         : m_Device(device)
     {
-        if (descriptor) {
-            m_Layouts.push_back(descriptor->GetGlobalLayout());
-        }
     }
 
     GraphicsPipelineBuilder& GraphicsPipelineBuilder::SetVertexShader(const std::filesystem::path& path)
@@ -267,12 +263,9 @@ namespace RHI {
         vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR, m_Pipeline);
     }
 
-    RayTracingPipelineBuilder::RayTracingPipelineBuilder(const std::shared_ptr<Device>& device, const std::shared_ptr<DescriptorManager>& descriptor)
+    RayTracingPipelineBuilder::RayTracingPipelineBuilder(const std::shared_ptr<Device>& device)
         : m_Device(device)
     {
-        if (descriptor) {
-            m_Layouts.push_back(descriptor->GetGlobalLayout());
-        }
     }
 
     RayTracingPipelineBuilder& RayTracingPipelineBuilder::AddRayGenShader(const std::filesystem::path& path)

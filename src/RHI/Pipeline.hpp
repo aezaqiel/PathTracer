@@ -6,7 +6,6 @@
 namespace RHI {
 
     class Device;
-    class DescriptorManager;
     class Shader;
     class Buffer;
 
@@ -45,7 +44,7 @@ namespace RHI {
     class GraphicsPipelineBuilder
     {
     public:
-        GraphicsPipelineBuilder(const std::shared_ptr<Device>& device, const std::shared_ptr<DescriptorManager>& descriptor);
+        GraphicsPipelineBuilder(const std::shared_ptr<Device>& device);
 
         GraphicsPipelineBuilder& SetVertexShader(const std::filesystem::path& path);
         GraphicsPipelineBuilder& SetFragmentShader(const std::filesystem::path& path);
@@ -140,7 +139,7 @@ namespace RHI {
     class RayTracingPipelineBuilder
     {
     public:
-        RayTracingPipelineBuilder(const std::shared_ptr<Device>& device, const std::shared_ptr<DescriptorManager>& descriptor);
+        RayTracingPipelineBuilder(const std::shared_ptr<Device>& device);
 
         RayTracingPipelineBuilder& AddRayGenShader(const std::filesystem::path& path);
         RayTracingPipelineBuilder& AddMissShader(const std::filesystem::path& path);

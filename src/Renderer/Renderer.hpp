@@ -34,8 +34,8 @@ private:
     std::unique_ptr<RHI::CommandContext<RHI::QueueType::Compute>> m_ComputeCommand;
     std::unique_ptr<RHI::CommandContext<RHI::QueueType::Transfer>> m_TransferCommand;
 
-    std::shared_ptr<RHI::DescriptorManager> m_DescriptorManager;
-    std::array<std::unique_ptr<RHI::DescriptorAllocator>, RHI::Device::GetFrameInFlight()> m_DescriptorAllocators;
+    std::unique_ptr<RHI::BindlessHeap> m_BindlessHeap;
+    VkDescriptorSetLayout m_DrawLayout { VK_NULL_HANDLE };
 
     std::unique_ptr<RHI::Texture> m_StorageTexture;
 
