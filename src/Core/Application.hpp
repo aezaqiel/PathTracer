@@ -1,15 +1,15 @@
 #pragma once
 
 #include "Events.hpp"
-
-class Window;
-class Renderer;
+#include "Window.hpp"
+#include "Renderer/Renderer.hpp"
+#include "Scene/CameraSystem.hpp"
 
 class Application
 {
 public:
     Application();
-    ~Application();
+    ~Application() = default;
 
     void Run();
 
@@ -22,4 +22,6 @@ private:
 
     std::shared_ptr<Window> m_Window;
     std::unique_ptr<Renderer> m_Renderer;
+
+    std::unique_ptr<Scene::CameraSystem> m_Camera;
 };

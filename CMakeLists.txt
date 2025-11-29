@@ -82,6 +82,12 @@ add_executable(${PROJECT_NAME}
     src/Scene/SceneData.hpp
     src/Scene/SceneLoader.hpp
     src/Scene/SceneLoader.cpp
+    src/Scene/Camera.hpp
+    src/Scene/CameraRig.hpp
+    src/Scene/CameraSystem.hpp
+    src/Scene/CameraSystem.cpp
+    src/Scene/Rigs/FreeFlyRig.hpp
+    src/Scene/Rigs/FreeFlyRig.cpp
 
     src/Renderer/Renderer.hpp
     src/Renderer/Renderer.cpp

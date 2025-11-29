@@ -10,6 +10,8 @@
 #include "RHI/DescriptorManager.hpp"
 #include "RHI/Pipeline.hpp"
 
+#include "Scene/Camera.hpp"
+
 class Window;
 
 class Renderer
@@ -18,9 +20,10 @@ public:
     Renderer(const std::shared_ptr<Window>& window);
     ~Renderer();
 
-    void Draw();
+    void Draw(Scene::CameraData&& cam);
 
 private:
+    void LoadScene();
     void RecreateSwapchain() const;
 
 private:
@@ -38,6 +41,7 @@ private:
     VkDescriptorSetLayout m_DrawLayout { VK_NULL_HANDLE };
 
     std::unique_ptr<RHI::Texture> m_StorageTexture;
+    std::unique_ptr<RHI::Buffer> m_CameraBuffer;
 
     std::unique_ptr<RHI::GraphicsPipeline> m_GraphicsPipeline;
     std::unique_ptr<RHI::RayTracingPipelne> m_RayTracingPipeline;

@@ -1,9 +1,7 @@
 #include "Application.hpp"
 
-#include "Window.hpp"
 #include "Input.hpp"
-
-#include "Renderer/Renderer.hpp"
+#include "Scene/Rigs/FreeFlyRig.hpp"
 
 #define BIND_EVENT_FN(fn) [this](auto&&... args) -> decltype(auto) { return this->fn(std::forward<decltype(args)>(args)...); }
 
@@ -13,25 +11,40 @@ Application::Application()
     m_Window->BindEventCallback(BIND_EVENT_FN(Application::DispatchEvents));
 
     m_Renderer = std::make_unique<Renderer>(m_Window);
-}
 
-Application::~Application()
-{
+    m_Camera = std::make_unique<Scene::CameraSystem>(m_Window->GetWidth(), m_Window->GetHeight());
+    m_Camera->AddRig<Scene::FreeFlyRig>(Scene::FreeFlyRig::Settings {
+        .moveSpeed = 5.0f,
+        .moveBoost = 4.0f,
+        .rotationSpeed = 0.1f,
+        .damping = 0.2f
+    });
 }
 
 void Application::Run()
 {
+    auto last = std::chrono::steady_clock::now();
+
     while (m_Running) {
+        auto now = std::chrono::steady_clock::now();
+        std::chrono::duration<f32> duration = now - last;
+        f32 dt = duration.count();
+        last = now;
+
         Window::PollEvents();
-        Input::Update();
 
         if (Input::IsKeyDown(KeyCode::Escape)) {
             m_Running = false;
         }
 
+        m_Camera->Update(dt);
+
         if (!m_Minimized) {
-            m_Renderer->Draw();
+            auto cam = m_Camera->GetShaderData();
+            m_Renderer->Draw(std::move(cam));
         }
+
+        Input::Update();
     }
 }
 
@@ -49,4 +62,5 @@ void Application::DispatchEvents(const Event& event)
     });
 
     Input::OnEvent(event);
+    m_Camera->OnEvent(event);
 }
