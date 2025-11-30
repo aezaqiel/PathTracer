@@ -27,6 +27,9 @@ private:
     void RecreateSwapchain() const;
 
 private:
+    template <typename T>
+    using PerFrame = std::array<T, RHI::Device::GetFrameInFlight()>;
+
     std::shared_ptr<Window> m_Window;
 
     std::shared_ptr<RHI::Instance> m_Instance;
@@ -37,10 +40,11 @@ private:
     std::unique_ptr<RHI::CommandContext<RHI::QueueType::Compute>> m_ComputeCommand;
     std::unique_ptr<RHI::CommandContext<RHI::QueueType::Transfer>> m_TransferCommand;
 
-    std::unique_ptr<RHI::Texture> m_StorageTexture;
-    std::array<std::unique_ptr<RHI::Buffer>, RHI::Device::GetFrameInFlight()> m_CamBuffers;
-
     std::unique_ptr<RHI::BindlessHeap> m_BindlessHeap;
+
+    PerFrame<std::unique_ptr<RHI::Texture>> m_StorageTextures;
+    PerFrame<std::unique_ptr<RHI::Buffer>> m_CamBuffers;
+
     VkDescriptorSetLayout m_DrawLayout { VK_NULL_HANDLE };
 
     std::unique_ptr<RHI::GraphicsPipeline> m_GraphicsPipeline;

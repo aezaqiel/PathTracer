@@ -49,34 +49,35 @@ Renderer::Renderer(const std::shared_ptr<Window>& window)
     m_ComputeCommand = std::make_unique<RHI::CommandContext<RHI::QueueType::Compute>>(m_Device);
     m_TransferCommand = std::make_unique<RHI::CommandContext<RHI::QueueType::Transfer>>(m_Device);
 
-    m_StorageTexture = std::make_unique<RHI::Texture>(
-        std::make_shared<RHI::Image>(m_Device, RHI::Image::Spec {
-            .extent = { window->GetWidth(), window->GetHeight(), 1 },
-            .format = VK_FORMAT_R32G32B32A32_SFLOAT,
-            .usage = VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT,
-            .memory = VMA_MEMORY_USAGE_GPU_ONLY
-        }),
-        std::make_shared<RHI::Sampler>(m_Device, RHI::Sampler::Spec {
-            .magFilter = VK_FILTER_LINEAR,
-            .minFilter = VK_FILTER_LINEAR,
-            .addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT,
-            .addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT,
-            .addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT,
-            .maxAnisotropy = m_Device->GetProps().properties.limits.maxSamplerAnisotropy,
-            .borderColor = VK_BORDER_COLOR_INT_OPAQUE_BLACK
-        })
-    );
+    m_BindlessHeap = std::make_unique<RHI::BindlessHeap>(m_Device);
 
     for (usize i = 0; i < RHI::Device::GetFrameInFlight(); ++i) {
+        m_StorageTextures[i] = std::make_unique<RHI::Texture>(
+            std::make_shared<RHI::Image>(m_Device, RHI::Image::Spec {
+                .extent = { window->GetWidth(), window->GetHeight(), 1 },
+                .format = VK_FORMAT_R32G32B32A32_SFLOAT,
+                .usage = VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT,
+                .memory = VMA_MEMORY_USAGE_GPU_ONLY
+            }),
+            std::make_shared<RHI::Sampler>(m_Device, RHI::Sampler::Spec {
+                .magFilter = VK_FILTER_LINEAR,
+                .minFilter = VK_FILTER_LINEAR,
+                .addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT,
+                .addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT,
+                .addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT,
+                .maxAnisotropy = m_Device->GetProps().properties.limits.maxSamplerAnisotropy,
+                .borderColor = VK_BORDER_COLOR_INT_OPAQUE_BLACK
+            })
+        );
+
+        m_BindlessHeap->RegisterTexture(*m_StorageTextures[i]);
+
         m_CamBuffers[i] = std::make_unique<RHI::Buffer>(m_Device, RHI::Buffer::Spec {
             .size = sizeof(Scene::CameraData),
             .usage = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
             .memory = VMA_MEMORY_USAGE_CPU_TO_GPU
         });
     }
-
-    m_BindlessHeap = std::make_unique<RHI::BindlessHeap>(m_Device);
-    m_BindlessHeap->RegisterTexture(*m_StorageTexture);
 
     m_DrawLayout = RHI::DescriptorLayoutBuilder(m_Device)
         .AddBinding(0, VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR, VK_SHADER_STAGE_RAYGEN_BIT_KHR)
@@ -130,12 +131,13 @@ void Renderer::Draw(Scene::CameraData&& cam)
         }
     }
 
+    auto& storageTex = m_StorageTextures[m_Device->GetCurrentFrameIndex()];
     auto& camBuffer = m_CamBuffers[m_Device->GetCurrentFrameIndex()];
 
     camBuffer->Write(&cam, sizeof(Scene::CameraData));
 
     VkCommandBuffer computeCmd = m_ComputeCommand->Record([&](VkCommandBuffer cmd) {
-        auto storageImage = m_StorageTexture->GetImage();
+        auto storageImage = storageTex->GetImage();
 
         storageImage->TransitionLayout(cmd,
             VK_IMAGE_LAYOUT_GENERAL,
@@ -150,7 +152,7 @@ void Renderer::Draw(Scene::CameraData&& cam)
 
         RHI::DescriptorWriter()
             .WriteAS(0, m_TLAS->GetAS())
-            .WriteImage(1, m_StorageTexture->GetImage()->GetView(), VK_NULL_HANDLE, VK_IMAGE_LAYOUT_GENERAL, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE)
+            .WriteImage(1, storageImage->GetView(), VK_NULL_HANDLE, VK_IMAGE_LAYOUT_GENERAL, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE)
             .WriteBuffer(2, camBuffer->GetBuffer(), camBuffer->GetSize(), 0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER)
             .WriteBuffer(3, m_ObjectDescBuffer->GetBuffer(), m_ObjectDescBuffer->GetSize(), 0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER)
             .WriteBuffer(4, m_MaterialBuffer->GetBuffer(), m_MaterialBuffer->GetSize(), 0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER)
@@ -221,7 +223,7 @@ void Renderer::Draw(Scene::CameraData&& cam)
             .extent = m_Swapchain->GetExtent()
         });
 
-        u32 storageImageIndex = m_StorageTexture->GetImageIndex();
+        u32 storageImageIndex = storageTex->GetImageIndex();
 
         vkCmdPushConstants(cmd, m_GraphicsPipeline->GetLayout(), VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(u32), &storageImageIndex);
 
