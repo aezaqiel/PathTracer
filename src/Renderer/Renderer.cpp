@@ -34,13 +34,20 @@ namespace {
         u32 _p;
     };
 
+    struct RTPushConstant
+    {
+        glm::uvec2 offset;
+        glm::uvec2 resolution;
+    };
+
 }
 
 Renderer::Renderer(const std::shared_ptr<Window>& window, const Settings& settings)
     :   m_Window(window),
         m_Width(settings.width),
         m_Height(settings.height),
-        m_Samples(settings.samples)
+        m_Samples(settings.samples),
+        m_TileSize(settings.tile)
 {
     m_Instance = std::make_shared<RHI::Instance>(window);
     m_Device = std::make_shared<RHI::Device>(m_Instance);
@@ -94,6 +101,7 @@ Renderer::Renderer(const std::shared_ptr<Window>& window, const Settings& settin
         .AddClosestHitShader(s_ShaderPath / "closesthit.rchit.spv")
         .AddLayout(m_BindlessHeap->GetLayout())
         .AddLayout(m_RTLayout)
+        .AddPushConstant(sizeof(RTPushConstant), VK_SHADER_STAGE_RAYGEN_BIT_KHR)
         .Build();
 
     m_GLayout = RHI::DescriptorLayoutBuilder(m_Device)
@@ -174,7 +182,23 @@ void Renderer::Draw(Scene::CameraData&& cam)
         auto call = m_RayTracingPipeline->GetCallRegion();
 
         auto extent = storageTex->GetImage()->GetExtent();
-        vkCmdTraceRaysKHR(cmd, &rgen, &miss, &hit, &call, extent.width, extent.height, extent.depth);
+
+        for (u32 y = 0; y < extent.height; y += m_TileSize) {
+            for (u32 x = 0; x < extent.width; x += m_TileSize) {
+                u32 width = std::min(m_TileSize, extent.width - x);
+                u32 height = std::min(m_TileSize, extent.height - y);
+
+                RTPushConstant pc {
+                    { x, y },
+                    { extent.width, extent.height }
+                };
+
+                vkCmdPushConstants(cmd, m_RayTracingPipeline->GetLayout(), VK_SHADER_STAGE_RAYGEN_BIT_KHR, 0, sizeof(RTPushConstant), &pc);
+                vkCmdTraceRaysKHR(cmd, &rgen, &miss, &hit, &call, width, height, 1);
+            }
+        }
+
+        // vkCmdTraceRaysKHR(cmd, &rgen, &miss, &hit, &call, extent.width, extent.height, extent.depth);
 
         storageTex->GetImage()->TransitionLayout(cmd,
             VK_IMAGE_LAYOUT_GENERAL,
@@ -295,7 +319,7 @@ void Renderer::OnEvent(const Event& event)
 
 void Renderer::LoadScene()
 {
-    auto model = Scene::GlTFLoader::Load(s_AssetPath / "Suzanne.glb");
+    auto model = Scene::GlTFLoader::Load(s_AssetPath / "Sponza.glb");
 
     m_VertexBuffer = std::make_unique<RHI::Buffer>(m_Device, RHI::Buffer::Spec {
         .size = model->vertices.size() * sizeof(Scene::Vertex),

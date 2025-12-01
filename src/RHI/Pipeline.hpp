@@ -146,7 +146,7 @@ namespace RHI {
         RayTracingPipelineBuilder& AddClosestHitShader(const std::filesystem::path& path);
 
         RayTracingPipelineBuilder& AddLayout(VkDescriptorSetLayout layout);
-        RayTracingPipelineBuilder& AddPushConstant(u32 size);
+        RayTracingPipelineBuilder& AddPushConstant(u32 size, VkShaderStageFlags stage);
 
         std::unique_ptr<RayTracingPipelne> Build();
 

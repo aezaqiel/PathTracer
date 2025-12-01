@@ -13,7 +13,8 @@ Application::Application()
     m_Renderer = std::make_unique<Renderer>(m_Window, Renderer::Settings {
         .width = m_Window->GetWidth(),
         .height = m_Window->GetHeight(),
-        .samples = 32
+        .samples = 32,
+        .tile = 128
     });
 
     m_Camera = std::make_unique<Scene::CameraSystem>(m_Window->GetWidth(), m_Window->GetHeight());

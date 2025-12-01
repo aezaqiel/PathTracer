@@ -316,10 +316,10 @@ namespace RHI {
         return *this;
     }
 
-    RayTracingPipelineBuilder& RayTracingPipelineBuilder::AddPushConstant(u32 size)
+    RayTracingPipelineBuilder& RayTracingPipelineBuilder::AddPushConstant(u32 size, VkShaderStageFlags stage)
     {
         m_PushConstants.push_back(VkPushConstantRange {
-            .stageFlags = VK_SHADER_STAGE_ALL,
+            .stageFlags = stage,
             .offset = 0,
             .size = size
         });
