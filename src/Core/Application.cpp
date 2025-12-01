@@ -10,7 +10,11 @@ Application::Application()
     m_Window = std::make_shared<Window>(1280, 720, "PathTracer");
     m_Window->BindEventCallback(BIND_EVENT_FN(Application::DispatchEvents));
 
-    m_Renderer = std::make_unique<Renderer>(m_Window);
+    m_Renderer = std::make_unique<Renderer>(m_Window, Renderer::Settings {
+        .width = m_Window->GetWidth(),
+        .height = m_Window->GetHeight(),
+        .samples = 32
+    });
 
     m_Camera = std::make_unique<Scene::CameraSystem>(m_Window->GetWidth(), m_Window->GetHeight());
     m_Camera->AddRig<Scene::FreeFlyRig>(Scene::FreeFlyRig::Settings {
@@ -63,4 +67,5 @@ void Application::DispatchEvents(const Event& event)
 
     Input::OnEvent(event);
     m_Camera->OnEvent(event);
+    m_Renderer->OnEvent(event);
 }

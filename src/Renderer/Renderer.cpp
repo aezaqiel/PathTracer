@@ -36,8 +36,11 @@ namespace {
 
 }
 
-Renderer::Renderer(const std::shared_ptr<Window>& window)
-    : m_Window(window)
+Renderer::Renderer(const std::shared_ptr<Window>& window, const Settings& settings)
+    :   m_Window(window),
+        m_Width(settings.width),
+        m_Height(settings.height),
+        m_Samples(settings.samples)
 {
     m_Instance = std::make_shared<RHI::Instance>(window);
     m_Device = std::make_shared<RHI::Device>(m_Instance);
@@ -70,8 +73,6 @@ Renderer::Renderer(const std::shared_ptr<Window>& window)
             })
         );
 
-        m_BindlessHeap->RegisterTexture(*m_StorageTextures[i]);
-
         m_CamBuffers[i] = std::make_unique<RHI::Buffer>(m_Device, RHI::Buffer::Spec {
             .size = sizeof(Scene::CameraData),
             .usage = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
@@ -79,12 +80,24 @@ Renderer::Renderer(const std::shared_ptr<Window>& window)
         });
     }
 
-    m_DrawLayout = RHI::DescriptorLayoutBuilder(m_Device)
+    m_RTLayout = RHI::DescriptorLayoutBuilder(m_Device)
         .AddBinding(0, VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR, VK_SHADER_STAGE_RAYGEN_BIT_KHR)
         .AddBinding(1, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, VK_SHADER_STAGE_RAYGEN_BIT_KHR)
         .AddBinding(2, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_RAYGEN_BIT_KHR)
         .AddBinding(3, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR)
         .AddBinding(4, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR)
+        .Build();
+
+    m_RayTracingPipeline = RHI::RayTracingPipelineBuilder(m_Device)
+        .AddRayGenShader(s_ShaderPath / "raygen.rgen.spv")
+        .AddMissShader(s_ShaderPath / "miss.rmiss.spv")
+        .AddClosestHitShader(s_ShaderPath / "closesthit.rchit.spv")
+        .AddLayout(m_BindlessHeap->GetLayout())
+        .AddLayout(m_RTLayout)
+        .Build();
+
+    m_GLayout = RHI::DescriptorLayoutBuilder(m_Device)
+        .AddBinding(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT)
         .Build();
 
     std::vector<VkFormat> colorFormats = { m_Swapchain->GetFormat() };
@@ -99,15 +112,8 @@ Renderer::Renderer(const std::shared_ptr<Window>& window)
         .SetPolygonMode(VK_POLYGON_MODE_FILL)
         .SetCullMode(VK_CULL_MODE_NONE)
         .AddLayout(m_BindlessHeap->GetLayout())
+        .AddLayout(m_GLayout)
         .AddPushConstant(sizeof(u32), VK_SHADER_STAGE_FRAGMENT_BIT)
-        .Build();
-
-    m_RayTracingPipeline = RHI::RayTracingPipelineBuilder(m_Device)
-        .AddRayGenShader(s_ShaderPath / "raygen.rgen.spv")
-        .AddMissShader(s_ShaderPath / "miss.rmiss.spv")
-        .AddClosestHitShader(s_ShaderPath / "closesthit.rchit.spv")
-        .AddLayout(m_BindlessHeap->GetLayout())
-        .AddLayout(m_DrawLayout)
         .Build();
 
     LoadScene();
@@ -117,11 +123,17 @@ Renderer::~Renderer()
 {
     m_Device->WaitIdle();
 
-    vkDestroyDescriptorSetLayout(m_Device->GetDevice(), m_DrawLayout, nullptr);
+    vkDestroyDescriptorSetLayout(m_Device->GetDevice(), m_RTLayout, nullptr);
+    vkDestroyDescriptorSetLayout(m_Device->GetDevice(), m_GLayout, nullptr);
 }
 
 void Renderer::Draw(Scene::CameraData&& cam)
 {
+    if (m_ResizeRequested) {
+        RecreateSwapchain();
+        m_ResizeRequested = false;
+    }
+
     m_Device->SyncFrame();
 
     if (auto result = m_Swapchain->AcquireNextImage()) {
@@ -137,9 +149,7 @@ void Renderer::Draw(Scene::CameraData&& cam)
     camBuffer->Write(&cam, sizeof(Scene::CameraData));
 
     VkCommandBuffer computeCmd = m_ComputeCommand->Record([&](VkCommandBuffer cmd) {
-        auto storageImage = storageTex->GetImage();
-
-        storageImage->TransitionLayout(cmd,
+        storageTex->GetImage()->TransitionLayout(cmd,
             VK_IMAGE_LAYOUT_GENERAL,
             VK_PIPELINE_STAGE_2_NONE,
             VK_PIPELINE_STAGE_2_RAY_TRACING_SHADER_BIT_KHR,
@@ -152,7 +162,7 @@ void Renderer::Draw(Scene::CameraData&& cam)
 
         RHI::DescriptorWriter()
             .WriteAS(0, m_TLAS->GetAS())
-            .WriteImage(1, storageImage->GetView(), VK_NULL_HANDLE, VK_IMAGE_LAYOUT_GENERAL, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE)
+            .WriteImage(1, storageTex->GetImage()->GetView(), VK_NULL_HANDLE, VK_IMAGE_LAYOUT_GENERAL, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE)
             .WriteBuffer(2, camBuffer->GetBuffer(), camBuffer->GetSize(), 0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER)
             .WriteBuffer(3, m_ObjectDescBuffer->GetBuffer(), m_ObjectDescBuffer->GetSize(), 0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER)
             .WriteBuffer(4, m_MaterialBuffer->GetBuffer(), m_MaterialBuffer->GetSize(), 0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER)
@@ -163,19 +173,32 @@ void Renderer::Draw(Scene::CameraData&& cam)
         auto hit = m_RayTracingPipeline->GetHitRegion();
         auto call = m_RayTracingPipeline->GetCallRegion();
 
-        auto extent = storageImage->GetExtent();
+        auto extent = storageTex->GetImage()->GetExtent();
         vkCmdTraceRaysKHR(cmd, &rgen, &miss, &hit, &call, extent.width, extent.height, extent.depth);
 
-        storageImage->TransitionLayout(cmd,
-            VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+        storageTex->GetImage()->TransitionLayout(cmd,
+            VK_IMAGE_LAYOUT_GENERAL,
             VK_PIPELINE_STAGE_2_RAY_TRACING_SHADER_BIT_KHR,
             VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT,
             VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT,
-            VK_ACCESS_2_NONE
+            VK_ACCESS_2_NONE,
+            m_Device->GetQueueFamily<RHI::QueueType::Compute>(),
+            m_Device->GetQueueFamily<RHI::QueueType::Graphics>()
         );
     });
 
     VkCommandBuffer graphicsCmd = m_GraphicsCommand->Record([&](VkCommandBuffer cmd) {
+        storageTex->GetImage()->TransitionLayout(cmd,
+            VK_IMAGE_LAYOUT_GENERAL,
+            VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT,
+            VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT,
+            VK_ACCESS_2_NONE,
+            VK_ACCESS_2_SHADER_STORAGE_READ_BIT,
+            m_Device->GetQueueFamily<RHI::QueueType::Compute>(),
+            m_Device->GetQueueFamily<RHI::QueueType::Graphics>()
+        );
+
+
         auto swapchainImage = m_Swapchain->GetCurrentImage();
 
         swapchainImage->TransitionLayout(cmd,
@@ -210,6 +233,10 @@ void Renderer::Draw(Scene::CameraData&& cam)
         m_GraphicsPipeline->Bind(cmd);
         m_BindlessHeap->Bind(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, m_GraphicsPipeline->GetLayout());
 
+        RHI::DescriptorWriter()
+            .WriteImage(0, storageTex->GetImage()->GetView(), storageTex->GetSampler()->GetSampler(), VK_IMAGE_LAYOUT_GENERAL, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER)
+            .Push(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, m_GraphicsPipeline->GetLayout(), 1);
+
         m_GraphicsPipeline->SetViewport(cmd, VkViewport {
             .x = 0.0f, .y = 0.0f,
             .width = static_cast<f32>(m_Swapchain->GetExtent().width),
@@ -222,10 +249,6 @@ void Renderer::Draw(Scene::CameraData&& cam)
             .offset = VkOffset2D { 0, 0 },
             .extent = m_Swapchain->GetExtent()
         });
-
-        u32 storageImageIndex = storageTex->GetImageIndex();
-
-        vkCmdPushConstants(cmd, m_GraphicsPipeline->GetLayout(), VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(u32), &storageImageIndex);
 
         vkCmdDraw(cmd, 3, 1, 0, 0);
 
@@ -258,9 +281,21 @@ void Renderer::Draw(Scene::CameraData&& cam)
     }
 }
 
+void Renderer::OnEvent(const Event& event)
+{
+    EventDispatcher dispatcher(event);
+
+    dispatcher.Dispatch<WindowResizedEvent>([&](const WindowResizedEvent& e) {
+        m_Width = e.width;
+        m_Height = e.height;
+
+        m_ResizeRequested = true;
+    });
+}
+
 void Renderer::LoadScene()
 {
-    auto model = Scene::GlTFLoader::Load(s_AssetPath / "Sponza.glb");
+    auto model = Scene::GlTFLoader::Load(s_AssetPath / "Suzanne.glb");
 
     m_VertexBuffer = std::make_unique<RHI::Buffer>(m_Device, RHI::Buffer::Spec {
         .size = model->vertices.size() * sizeof(Scene::Vertex),
@@ -477,5 +512,5 @@ void Renderer::LoadScene()
 void Renderer::RecreateSwapchain() const
 {
     m_Device->WaitIdle();
-    m_Swapchain->Create(m_Window->GetWidth(), m_Window->GetHeight());
+    m_Swapchain->Create(m_Width, m_Height);
 }
