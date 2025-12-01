@@ -2,6 +2,7 @@
 
 #include <tiny_gltf.h>
 #include <glm/gtc/type_ptr.hpp>
+#include <meshoptimizer.h>
 
 namespace Scene {
 
@@ -153,39 +154,36 @@ namespace Scene {
             auto& sceneMesh = scene.meshes.emplace_back();
 
             for (const auto& primitive : mesh.primitives) {
-                u32 vertexOffset = static_cast<u32>(scene.vertices.size());
-                u32 indexOffset = static_cast<u32>(scene.indices.size());
+                std::vector<u32> primIndices;
+                std::vector<Vertex> primVertices;
 
                 u32 vertexCount = 0;
-                u32 indexCount = 0;
 
                 if (primitive.indices >= 0) {
                     const auto& accessor = model.accessors[primitive.indices];
                     const auto& bufferView = model.bufferViews[accessor.bufferView];
                     const auto& buffer = model.buffers[bufferView.buffer];
 
-                    indexCount = static_cast<u32>(accessor.count);
+                    primIndices.reserve(accessor.count);
                     const void* pData = &(buffer.data[bufferView.byteOffset + accessor.byteOffset]);
-
-                    scene.indices.reserve(scene.indices.size() + accessor.count);
 
                     switch (accessor.componentType) {
                         case TINYGLTF_COMPONENT_TYPE_UNSIGNED_BYTE: {
                             const auto* buf = static_cast<const u8*>(pData);
                             for (usize i = 0; i < accessor.count; ++i) {
-                                scene.indices.push_back(static_cast<u32>(buf[i]) + vertexOffset);
+                                primIndices.push_back(buf[i]);
                             }
                         } break;
                         case TINYGLTF_COMPONENT_TYPE_UNSIGNED_SHORT: {
                             const auto* buf = static_cast<const u16*>(pData);
                             for (usize i = 0; i < accessor.count; ++i) {
-                                scene.indices.push_back(static_cast<u32>(buf[i]) + vertexOffset);
+                                primIndices.push_back(buf[i]);
                             }
                         } break;
                         case TINYGLTF_COMPONENT_TYPE_UNSIGNED_INT: {
                             const auto* buf = static_cast<const u32*>(pData);
                             for (usize i = 0; i < accessor.count; ++i) {
-                                scene.indices.push_back(buf[i] + vertexOffset);
+                                primIndices.push_back(buf[i]);
                             }
                         } break;
                         default:
@@ -195,11 +193,10 @@ namespace Scene {
                 } else {
                     const auto& posAccessor = model.accessors[primitive.attributes.at("POSITION")];
                     vertexCount = static_cast<u32>(posAccessor.count);
-                    indexCount = vertexCount;
+                    primIndices.reserve(vertexCount);
 
-                    scene.indices.reserve(scene.indices.size() + indexCount);
-                    for (u32 i = 0; i < indexCount; ++i) {
-                        scene.indices.push_back(vertexOffset + i);
+                    for (u32 i = 0; i < vertexCount; ++i) {
+                        primIndices.push_back(i);
                     }
                 }
 
@@ -253,9 +250,9 @@ namespace Scene {
                     }
                 }
 
-                scene.vertices.reserve(scene.vertices.size() + vertexCount);
+                primVertices.reserve(vertexCount);
                 for (usize v = 0; v < vertexCount; ++v) {
-                    auto& vertex = scene.vertices.emplace_back();
+                    auto& vertex = primVertices.emplace_back();
 
                     memcpy(&vertex.position, pPosBase + v * posStride, sizeof(glm::vec3));
 
@@ -278,9 +275,72 @@ namespace Scene {
                     }
                 }
 
+                std::vector<u32> remap(vertexCount);
+                usize vertexCountOpt = meshopt_generateVertexRemap(
+                    remap.data(),
+                    primIndices.data(),
+                    primIndices.size(),
+                    primVertices.data(),
+                    vertexCount,
+                    sizeof(Vertex)
+                );
+
+                std::vector<u32> optIndices(primIndices.size());
+                std::vector<Vertex> optVertices(vertexCountOpt);
+
+                meshopt_remapIndexBuffer(
+                    optIndices.data(),
+                    primIndices.data(),
+                    primIndices.size(),
+                    remap.data()
+                );
+
+                meshopt_remapVertexBuffer(
+                    optVertices.data(),
+                    primVertices.data(),
+                    vertexCount,
+                    sizeof(Vertex),
+                    remap.data()
+                );
+
+                meshopt_optimizeVertexCache(
+                    optIndices.data(),
+                    optIndices.data(),
+                    optIndices.size(),
+                    vertexCountOpt
+                );
+
+                meshopt_optimizeOverdraw(
+                    optIndices.data(),
+                    optIndices.data(),
+                    optIndices.size(),
+                    &optVertices[0].position.x,
+                    vertexCountOpt,
+                    sizeof(Vertex),
+                    1.0f
+                );
+
+                meshopt_optimizeVertexFetch(
+                    optVertices.data(),
+                    optIndices.data(),
+                    optIndices.size(),
+                    optVertices.data(),
+                    vertexCountOpt,
+                    sizeof(Vertex)
+                );
+
+                u32 vertexOffset = static_cast<u32>(scene.vertices.size());
+                u32 indexOffset = static_cast<u32>(scene.indices.size());
+
+                for (auto& idx : optIndices) {
+                    scene.indices.push_back(idx + vertexOffset);
+                }
+
+                scene.vertices.insert(scene.vertices.end(), optVertices.begin(), optVertices.end());
+
                 sceneMesh.primitives.push_back(MeshPrimitive {
                     .indexOffset = indexOffset,
-                    .indexCount= indexCount,
+                    .indexCount = static_cast<u32>(optIndices.size()),
                     .vertexOffset = vertexOffset,
                     .materialIndex = static_cast<u32>(std::max(0, primitive.material))
                 });
