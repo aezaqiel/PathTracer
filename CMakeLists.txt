@@ -29,6 +29,7 @@ add_subdirectory(thirdparty/vma)
 add_subdirectory(thirdparty/glm)
 add_subdirectory(thirdparty/tinygltf)
 add_subdirectory(thirdparty/glfw)
+add_subdirectory(thirdparty/meshoptimizer)
 
 file(TO_CMAKE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/assets ASSET_FOLDER)
 file(TO_CMAKE_PATH ${SHADER_BIN_DIR} SHADER_FOLDER)
@@ -113,6 +114,7 @@ PRIVATE
     glm
     tinygltf
     glfw
+    meshoptimizer
 )
 
 target_compile_definitions(${PROJECT_NAME}
