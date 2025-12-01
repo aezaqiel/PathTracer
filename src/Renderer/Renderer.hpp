@@ -39,9 +39,6 @@ private:
     void RecreateSwapchain() const;
 
 private:
-    template <typename T>
-    using PerFrame = std::array<T, RHI::Device::GetFrameInFlight()>;
-
     std::shared_ptr<Window> m_Window;
 
     u32 m_Width { 0 };
@@ -61,8 +58,8 @@ private:
 
     std::unique_ptr<RHI::BindlessHeap> m_BindlessHeap;
 
-    PerFrame<std::unique_ptr<RHI::Texture>> m_StorageTextures;
-    PerFrame<std::unique_ptr<RHI::Buffer>> m_CamBuffers;
+    RHI::PerFrame<std::unique_ptr<RHI::Texture>> m_StorageTextures;
+    RHI::PerFrame<std::unique_ptr<RHI::Buffer>> m_CamBuffers;
 
     VkDescriptorSetLayout m_RTLayout { VK_NULL_HANDLE };
     VkDescriptorSetLayout m_GLayout { VK_NULL_HANDLE };

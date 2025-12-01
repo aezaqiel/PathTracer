@@ -63,8 +63,8 @@ namespace RHI {
     private:
         std::shared_ptr<Device> m_Device;
 
-        std::array<VkCommandPool, Device::GetFrameInFlight()> m_Pools;
-        std::array<VkCommandBuffer, Device::GetFrameInFlight()> m_Buffers;
+        PerFrame<VkCommandPool> m_Pools;
+        PerFrame<VkCommandBuffer> m_Buffers;
     };
 
 }

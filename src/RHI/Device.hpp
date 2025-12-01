@@ -205,4 +205,7 @@ namespace RHI {
         u64 m_TransferTimelineValue { 0 };
     };
 
+    template <typename T>
+    using PerFrame = std::array<T, Device::GetFrameInFlight()>;
+
 }
