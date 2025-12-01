@@ -68,7 +68,7 @@ namespace RHI {
             .sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_GEOMETRY_INFO_KHR,
             .pNext = nullptr,
             .type = VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_KHR,
-            .flags = VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR,
+            .flags = VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR | VK_BUILD_ACCELERATION_STRUCTURE_ALLOW_COMPACTION_BIT_KHR,
             .mode = VK_BUILD_ACCELERATION_STRUCTURE_MODE_BUILD_KHR,
             .srcAccelerationStructure = VK_NULL_HANDLE,
             .dstAccelerationStructure = VK_NULL_HANDLE,
@@ -123,7 +123,21 @@ namespace RHI {
         buildInfo.dstAccelerationStructure = m_AS;
         buildInfo.scratchData.deviceAddress = VkUtils::AlignUp(scratch.GetDeviceAddress(), scratchAlignment);
 
+        VkQueryPoolCreateInfo queryPoolInfo {
+            .sType = VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO,
+            .pNext = nullptr,
+            .flags = 0,
+            .queryType = VK_QUERY_TYPE_ACCELERATION_STRUCTURE_COMPACTED_SIZE_KHR,
+            .queryCount = 1,
+            .pipelineStatistics = 0
+        };
+
+        VkQueryPool queryPool = VK_NULL_HANDLE;
+        VK_CHECK(vkCreateQueryPool(m_Device->GetDevice(), &queryPoolInfo, nullptr, &queryPool));
+
         VkCommandBuffer cmdBuffer = queue.Record([&](VkCommandBuffer cmd) {
+            vkCmdResetQueryPool(cmd, queryPool, 0, 1);
+
             const VkAccelerationStructureBuildRangeInfoKHR* pRanges = ranges.data();
             vkCmdBuildAccelerationStructuresKHR(cmd, 1, &buildInfo, &pRanges);
 
@@ -149,10 +163,58 @@ namespace RHI {
             };
 
             vkCmdPipelineBarrier2(cmd, &dependency);
+
+            vkCmdWriteAccelerationStructuresPropertiesKHR(cmd, 1, &m_AS, VK_QUERY_TYPE_ACCELERATION_STRUCTURE_COMPACTED_SIZE_KHR, queryPool, 0);
         });
 
         m_Device->Submit<QueueType::Compute>(cmdBuffer, {}, {});
         m_Device->SyncTimeline<QueueType::Compute>();
+
+        VkDeviceSize compactedSize = 0;
+        VK_CHECK(vkGetQueryPoolResults(m_Device->GetDevice(), queryPool, 0, 1, sizeof(VkDeviceSize), &compactedSize, sizeof(VkDeviceSize), VK_QUERY_RESULT_64_BIT | VK_QUERY_RESULT_WAIT_BIT));
+
+        LOG_TRACE("BLAS Compaction: {} -> {} bytes ({:.2f}%)", sizeInfo.accelerationStructureSize, compactedSize, static_cast<f32>(compactedSize) / sizeInfo.accelerationStructureSize * 100.0f);
+
+        auto compactBuffer = std::make_unique<Buffer>(m_Device, Buffer::Spec {
+            .size = compactedSize,
+            .usage = VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_STORAGE_BIT_KHR | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
+            .memory = VMA_MEMORY_USAGE_GPU_ONLY
+        });
+
+        VkAccelerationStructureCreateInfoKHR compactInfo {
+            .sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_CREATE_INFO_KHR,
+            .pNext = nullptr,
+            .createFlags = 0,
+            .buffer = compactBuffer->GetBuffer(),
+            .offset = 0,
+            .size = compactedSize,
+            .type = VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_KHR,
+            .deviceAddress = 0
+        };
+
+        VkAccelerationStructureKHR compactAS = VK_NULL_HANDLE;
+        VK_CHECK(vkCreateAccelerationStructureKHR(m_Device->GetDevice(), &compactInfo, nullptr, &compactAS));
+
+        VkCommandBuffer compactCmd = queue.Record([&](VkCommandBuffer cmd) {
+            VkCopyAccelerationStructureInfoKHR copyInfo {
+                .sType = VK_STRUCTURE_TYPE_COPY_ACCELERATION_STRUCTURE_INFO_KHR,
+                .pNext = nullptr,
+                .src = m_AS,
+                .dst = compactAS,
+                .mode = VK_COPY_ACCELERATION_STRUCTURE_MODE_COMPACT_KHR
+            };
+
+            vkCmdCopyAccelerationStructureKHR(cmd, &copyInfo);
+        });
+
+        m_Device->Submit<QueueType::Compute>(compactCmd, {}, {});
+        m_Device->SyncTimeline<QueueType::Compute>();
+
+        vkDestroyQueryPool(m_Device->GetDevice(), queryPool, nullptr);
+        vkDestroyAccelerationStructureKHR(m_Device->GetDevice(), m_AS, nullptr);
+
+        m_AS = std::move(compactAS);
+        m_Buffer = std::move(compactBuffer);
 
         VkAccelerationStructureDeviceAddressInfoKHR addressInfo {
             .sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_DEVICE_ADDRESS_INFO_KHR,
