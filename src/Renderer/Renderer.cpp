@@ -157,12 +157,22 @@ void Renderer::Draw(Scene::CameraData&& cam)
     camBuffer->Write(&cam, sizeof(Scene::CameraData));
 
     VkCommandBuffer computeCmd = m_ComputeCommand->Record([&](VkCommandBuffer cmd) {
+        u32 srcQueue = m_Device->GetQueueFamily<RHI::QueueType::Graphics>();
+        u32 dstQueue = m_Device->GetQueueFamily<RHI::QueueType::Compute>();
+
+        if (storageTex->GetImage()->GetLayout() == VK_IMAGE_LAYOUT_UNDEFINED) {
+            srcQueue = VK_QUEUE_FAMILY_IGNORED;
+            dstQueue = VK_QUEUE_FAMILY_IGNORED;
+        }
+
         storageTex->GetImage()->TransitionLayout(cmd,
             VK_IMAGE_LAYOUT_GENERAL,
             VK_PIPELINE_STAGE_2_NONE,
             VK_PIPELINE_STAGE_2_RAY_TRACING_SHADER_BIT_KHR,
             VK_ACCESS_2_NONE,
-            VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT
+            VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT,
+            srcQueue,
+            dstQueue
         );
 
         m_RayTracingPipeline->Bind(cmd);
@@ -198,8 +208,6 @@ void Renderer::Draw(Scene::CameraData&& cam)
             }
         }
 
-        // vkCmdTraceRaysKHR(cmd, &rgen, &miss, &hit, &call, extent.width, extent.height, extent.depth);
-
         storageTex->GetImage()->TransitionLayout(cmd,
             VK_IMAGE_LAYOUT_GENERAL,
             VK_PIPELINE_STAGE_2_RAY_TRACING_SHADER_BIT_KHR,
@@ -221,7 +229,6 @@ void Renderer::Draw(Scene::CameraData&& cam)
             m_Device->GetQueueFamily<RHI::QueueType::Compute>(),
             m_Device->GetQueueFamily<RHI::QueueType::Graphics>()
         );
-
 
         auto swapchainImage = m_Swapchain->GetCurrentImage();
 
@@ -284,6 +291,16 @@ void Renderer::Draw(Scene::CameraData&& cam)
             VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT,
             VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
             VK_ACCESS_2_NONE
+        );
+
+        storageTex->GetImage()->TransitionLayout(cmd,
+            VK_IMAGE_LAYOUT_GENERAL,
+            VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT,
+            VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT,
+            VK_ACCESS_2_SHADER_STORAGE_READ_BIT,
+            VK_ACCESS_2_NONE,
+            m_Device->GetQueueFamily<RHI::QueueType::Graphics>(),
+            m_Device->GetQueueFamily<RHI::QueueType::Compute>()
         );
     });
 
