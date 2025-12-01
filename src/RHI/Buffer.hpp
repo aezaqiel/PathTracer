@@ -1,6 +1,7 @@
 #pragma once
 
 #include "VkTypes.hpp"
+#include "CommandContext.hpp"
 
 namespace RHI {
 
@@ -27,7 +28,16 @@ namespace RHI {
         void* Map(VkDeviceSize size = VK_WHOLE_SIZE, VkDeviceSize offset = 0);
         void Unmap();
 
-        void Write(void* data, VkDeviceSize size, VkDeviceSize offset = 0);
+        void Write(const void* data, VkDeviceSize size, VkDeviceSize offset = 0);
+
+        static std::unique_ptr<Buffer> Stage(
+            const std::shared_ptr<Device>& device,
+            CommandContext<QueueType::Transfer>& transfer,
+            VkBufferUsageFlags usage,
+            VkDeviceSize size,
+            const void* data,
+            u32 dstQueueFamily = VK_QUEUE_FAMILY_IGNORED
+        );
 
     private:
         std::shared_ptr<Device> m_Device;

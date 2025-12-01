@@ -321,19 +321,21 @@ void Renderer::LoadScene()
 {
     auto model = Scene::GlTFLoader::Load(s_AssetPath / "Suzanne.glb");
 
-    m_VertexBuffer = std::make_unique<RHI::Buffer>(m_Device, RHI::Buffer::Spec {
-        .size = model->vertices.size() * sizeof(Scene::Vertex),
-        .usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
-        .memory = VMA_MEMORY_USAGE_CPU_TO_GPU
-    });
-    m_VertexBuffer->Write(model->vertices.data(), m_VertexBuffer->GetSize());
+    m_VertexBuffer = RHI::Buffer::Stage(
+        m_Device, *m_TransferCommand,
+        VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
+        model->vertices.size() * sizeof(Scene::Vertex),
+        model->vertices.data(),
+        m_Device->GetQueueFamily<RHI::QueueType::Compute>()
+    );
 
-    m_IndexBuffer = std::make_unique<RHI::Buffer>(m_Device, RHI::Buffer::Spec {
-        .size = model->indices.size() * sizeof(u32),
-        .usage = VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
-        .memory = VMA_MEMORY_USAGE_CPU_TO_GPU
-    });
-    m_IndexBuffer->Write(model->indices.data(), m_IndexBuffer->GetSize());
+    m_IndexBuffer = RHI::Buffer::Stage(
+        m_Device, *m_TransferCommand,
+        VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
+        model->indices.size() * sizeof(u32),
+        model->indices.data(),
+        m_Device->GetQueueFamily<RHI::QueueType::Compute>()
+    );
 
     std::vector<u32> textures;
     textures.resize(model->textures.size());
@@ -456,12 +458,13 @@ void Renderer::LoadScene()
         });
     }
 
-    m_MaterialBuffer = std::make_unique<RHI::Buffer>(m_Device, RHI::Buffer::Spec {
-        .size = gpuMaterials.size() * sizeof(GPUMaterial),
-        .usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
-        .memory = VMA_MEMORY_USAGE_CPU_TO_GPU
-    });
-    m_MaterialBuffer->Write(gpuMaterials.data(), m_MaterialBuffer->GetSize());
+    m_MaterialBuffer = RHI::Buffer::Stage(
+        m_Device, *m_TransferCommand,
+        VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
+        gpuMaterials.size() * sizeof(GPUMaterial),
+        gpuMaterials.data(),
+        m_Device->GetQueueFamily<RHI::QueueType::Compute>()
+    );
 
     std::vector<RenderObject> renderObjs;
     std::vector<u32> objIndices;
@@ -482,12 +485,55 @@ void Renderer::LoadScene()
         }
     }
 
-    m_ObjectDescBuffer = std::make_unique<RHI::Buffer>(m_Device, RHI::Buffer::Spec {
-        .size = renderObjs.size() * sizeof(RenderObject),
-        .usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
-        .memory = VMA_MEMORY_USAGE_CPU_TO_GPU
+    m_ObjectDescBuffer = RHI::Buffer::Stage(
+        m_Device, *m_TransferCommand,
+        VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
+        renderObjs.size() * sizeof(RenderObject),
+        renderObjs.data(),
+        m_Device->GetQueueFamily<RHI::QueueType::Compute>()
+    );
+
+    VkCommandBuffer acquireCmd = m_ComputeCommand->Record([&](VkCommandBuffer cmd) {
+        std::vector<VkBufferMemoryBarrier2> barriers;
+
+        auto AddBarrier = [&](VkBuffer buffer, VkDeviceSize size) {
+            barriers.push_back(VkBufferMemoryBarrier2 {
+                .sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2,
+                .pNext = nullptr,
+                .srcStageMask = VK_PIPELINE_STAGE_2_NONE,
+                .srcAccessMask = VK_ACCESS_2_NONE,
+                .dstStageMask = VK_PIPELINE_STAGE_2_ACCELERATION_STRUCTURE_BUILD_BIT_KHR | VK_PIPELINE_STAGE_2_RAY_TRACING_SHADER_BIT_KHR,
+                .dstAccessMask = VK_ACCESS_2_ACCELERATION_STRUCTURE_READ_BIT_KHR | VK_ACCESS_2_SHADER_STORAGE_READ_BIT,
+                .srcQueueFamilyIndex = m_Device->GetQueueFamily<RHI::QueueType::Transfer>(),
+                .dstQueueFamilyIndex = m_Device->GetQueueFamily<RHI::QueueType::Compute>(),
+                .buffer = buffer,
+                .offset = 0,
+                .size = size
+            });
+        };
+
+        AddBarrier(m_VertexBuffer->GetBuffer(), m_VertexBuffer->GetSize());
+        AddBarrier(m_IndexBuffer->GetBuffer(), m_IndexBuffer->GetSize());
+        AddBarrier(m_MaterialBuffer->GetBuffer(), m_MaterialBuffer->GetSize());
+        AddBarrier(m_ObjectDescBuffer->GetBuffer(), m_ObjectDescBuffer->GetSize());
+
+        VkDependencyInfo dependency {
+            .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
+            .pNext = nullptr,
+            .dependencyFlags = 0,
+            .memoryBarrierCount = 0,
+            .pMemoryBarriers = nullptr,
+            .bufferMemoryBarrierCount = static_cast<u32>(barriers.size()),
+            .pBufferMemoryBarriers = barriers.data(),
+            .imageMemoryBarrierCount = 0,
+            .pImageMemoryBarriers = nullptr
+        };
+
+        vkCmdPipelineBarrier2(cmd, &dependency);
     });
-    m_ObjectDescBuffer->Write(renderObjs.data(), m_ObjectDescBuffer->GetSize());
+
+    m_Device->Submit<RHI::QueueType::Compute>(acquireCmd, {}, {});
+    m_Device->SyncTimeline<RHI::QueueType::Compute>();
 
     m_BLASes.reserve(model->meshes.size());
 
