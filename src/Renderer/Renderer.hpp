@@ -22,8 +22,6 @@ public:
     {
         u32 width;
         u32 height;
-        u32 samples;
-        u32 tile;
     };
 
 public:
@@ -55,8 +53,6 @@ private:
 
     u32 m_Width { 0 };
     u32 m_Height { 0 };
-    u32 m_Samples { 0 };
-    u32 m_TileSize { 0 };
 
     bool m_ResizeRequested { false };
 

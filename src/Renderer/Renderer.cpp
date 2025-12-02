@@ -34,20 +34,12 @@ namespace {
         u32 _p;
     };
 
-    struct RTPushConstant
-    {
-        glm::uvec2 offset;
-        glm::uvec2 resolution;
-    };
-
 }
 
 Renderer::Renderer(const std::shared_ptr<Window>& window, const Settings& settings)
     :   m_Window(window),
         m_Width(settings.width),
-        m_Height(settings.height),
-        m_Samples(settings.samples),
-        m_TileSize(settings.tile)
+        m_Height(settings.height)
 {
     m_Instance = std::make_shared<RHI::Instance>(window);
     m_Device = std::make_shared<RHI::Device>(m_Instance);
