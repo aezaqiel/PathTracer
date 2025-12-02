@@ -9,5 +9,10 @@ layout(set = 1, binding = 0) uniform sampler2D image;
 
 void main() 
 {
-    outColor = texture(image, inUV);
+    vec3 color = texture(image, inUV).rgb;
+
+    color = color / (color + vec3(1.0));
+    color = pow(color, vec3(1.0/2.2));
+
+    outColor = vec4(color, 1.0);
 }
