@@ -61,67 +61,63 @@ Renderer::Renderer(const std::shared_ptr<Window>& window, const Settings& settin
 
     m_BindlessHeap = std::make_unique<RHI::BindlessHeap>(m_Device);
 
-    for (usize i = 0; i < RHI::Device::GetFrameInFlight(); ++i) {
-        m_StorageTextures[i] = std::make_unique<RHI::Texture>(
-            std::make_shared<RHI::Image>(m_Device, RHI::Image::Spec {
-                .extent = { window->GetWidth(), window->GetHeight(), 1 },
-                .format = VK_FORMAT_R32G32B32A32_SFLOAT,
-                .usage = VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT,
-                .memory = VMA_MEMORY_USAGE_GPU_ONLY
-            }),
-            std::make_shared<RHI::Sampler>(m_Device, RHI::Sampler::Spec {
-                .magFilter = VK_FILTER_LINEAR,
-                .minFilter = VK_FILTER_LINEAR,
-                .addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT,
-                .addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT,
-                .addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT,
-                .maxAnisotropy = m_Device->GetProps().properties.limits.maxSamplerAnisotropy,
-                .borderColor = VK_BORDER_COLOR_INT_OPAQUE_BLACK
-            })
-        );
-
-        m_CamBuffers[i] = std::make_unique<RHI::Buffer>(m_Device, RHI::Buffer::Spec {
+    for (auto& frame : m_FrameData) {
+        frame.camera = std::make_unique<RHI::Buffer>(m_Device, RHI::Buffer::Spec {
             .size = sizeof(Scene::CameraData),
             .usage = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
             .memory = VMA_MEMORY_USAGE_CPU_TO_GPU
         });
+
+        frame.GBuffer = {
+            .albedo = std::make_unique<RHI::Image>(m_Device, RHI::Image::Spec {
+                .extent = { m_Width, m_Height, 1 },
+                .format = VK_FORMAT_R8G8B8A8_UNORM,
+                .usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_STORAGE_BIT,
+                .memory = VMA_MEMORY_USAGE_GPU_ONLY
+            }),
+            .normal = std::make_unique<RHI::Image>(m_Device, RHI::Image::Spec {
+                .extent = { m_Width, m_Height, 1 },
+                .format = VK_FORMAT_R16G16B16A16_SFLOAT,
+                .usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_STORAGE_BIT,
+                .memory = VMA_MEMORY_USAGE_GPU_ONLY
+            }),
+            .position = std::make_unique<RHI::Image>(m_Device, RHI::Image::Spec {
+                .extent = { m_Width, m_Height, 1 },
+                .format = VK_FORMAT_R32G32B32A32_SFLOAT,
+                .usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_STORAGE_BIT,
+                .memory = VMA_MEMORY_USAGE_GPU_ONLY
+            }),
+            .depth = std::make_unique<RHI::Image>(m_Device, RHI::Image::Spec {
+                .extent = { m_Width, m_Height, 1 },
+                .format = VK_FORMAT_D32_SFLOAT,
+                .usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
+                .memory = VMA_MEMORY_USAGE_GPU_ONLY
+            }),
+        };
     }
 
-    m_RTLayout = RHI::DescriptorLayoutBuilder(m_Device)
-        .AddBinding(0, VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR, VK_SHADER_STAGE_RAYGEN_BIT_KHR)
-        .AddBinding(1, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, VK_SHADER_STAGE_RAYGEN_BIT_KHR)
-        .AddBinding(2, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_RAYGEN_BIT_KHR)
-        .AddBinding(3, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR)
-        .AddBinding(4, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR)
+    m_GBufferLayout = RHI::DescriptorLayoutBuilder(m_Device)
+        .AddBinding(0, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT)
+        .AddBinding(1, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT)
+        .AddBinding(2, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT)
+        .AddBinding(3, VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT)
         .Build();
 
-    m_RayTracingPipeline = RHI::RayTracingPipelineBuilder(m_Device)
-        .AddRayGenShader(s_ShaderPath / "raygen.rgen.spv")
-        .AddMissShader(s_ShaderPath / "miss.rmiss.spv")
-        .AddClosestHitShader(s_ShaderPath / "closesthit.rchit.spv")
+    std::vector<VkFormat> GBufferFormats {
+        VK_FORMAT_R8G8B8A8_UNORM,
+        VK_FORMAT_R16G16B16A16_SFLOAT,
+        VK_FORMAT_R32G32B32A32_SFLOAT
+    };
+
+    m_GBufferPipeline = RHI::GraphicsPipelineBuilder(m_Device)
+        .SetVertexShader(s_ShaderPath / "gbuffer.vert.spv")
+        .SetFragmentShader(s_ShaderPath / "gbuffer.frag.spv")
+        .SetColorFormats(GBufferFormats)
+        .SetDepthFormat(VK_FORMAT_D32_SFLOAT)
+        .SetDepthTest(true, true)
         .AddLayout(m_BindlessHeap->GetLayout())
-        .AddLayout(m_RTLayout)
-        .AddPushConstant(sizeof(RTPushConstant), VK_SHADER_STAGE_RAYGEN_BIT_KHR)
-        .Build();
-
-    m_GLayout = RHI::DescriptorLayoutBuilder(m_Device)
-        .AddBinding(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT)
-        .Build();
-
-    std::vector<VkFormat> colorFormats = { m_Swapchain->GetFormat() };
-
-    m_GraphicsPipeline = RHI::GraphicsPipelineBuilder(m_Device)
-        .SetVertexShader(s_ShaderPath / "post.vert.spv")
-        .SetFragmentShader(s_ShaderPath / "post.frag.spv")
-        .SetColorFormats(colorFormats)
-        .SetDepthTest(false, false)
-        .SetDepthFormat(VK_FORMAT_UNDEFINED)
-        .SetInputTopology(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST)
-        .SetPolygonMode(VK_POLYGON_MODE_FILL)
-        .SetCullMode(VK_CULL_MODE_NONE)
-        .AddLayout(m_BindlessHeap->GetLayout())
-        .AddLayout(m_GLayout)
-        .AddPushConstant(sizeof(u32), VK_SHADER_STAGE_FRAGMENT_BIT)
+        .AddLayout(m_GBufferLayout)
+        .AddPushConstant(sizeof(Scene::CameraData) + sizeof(u32), VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT)
         .Build();
 
     LoadScene();
@@ -131,8 +127,7 @@ Renderer::~Renderer()
 {
     m_Device->WaitIdle();
 
-    vkDestroyDescriptorSetLayout(m_Device->GetDevice(), m_RTLayout, nullptr);
-    vkDestroyDescriptorSetLayout(m_Device->GetDevice(), m_GLayout, nullptr);
+    vkDestroyDescriptorSetLayout(m_Device->GetDevice(), m_GBufferLayout, nullptr);
 }
 
 void Renderer::Draw(Scene::CameraData&& cam)
@@ -142,184 +137,21 @@ void Renderer::Draw(Scene::CameraData&& cam)
         m_ResizeRequested = false;
     }
 
-    m_Device->SyncFrame();
+    auto& frame = m_FrameData[m_Device->GetCurrentFrameIndex()];
+    frame.camera->Write(&cam, sizeof(Scene::CameraData));
 
-    if (auto result = m_Swapchain->AcquireNextImage()) {
-        if (*result == VK_ERROR_OUT_OF_DATE_KHR) {
-            RecreateSwapchain();
-            return;
-        }
-    }
+    // m_Device->SyncFrame();
 
-    auto& storageTex = m_StorageTextures[m_Device->GetCurrentFrameIndex()];
-    auto& camBuffer = m_CamBuffers[m_Device->GetCurrentFrameIndex()];
+    // if (auto result = m_Swapchain->AcquireNextImage()) {
+    //     if (*result == VK_ERROR_OUT_OF_DATE_KHR) {
+    //         RecreateSwapchain();
+    //         return;
+    //     }
+    // }
 
-    camBuffer->Write(&cam, sizeof(Scene::CameraData));
-
-    VkCommandBuffer computeCmd = m_ComputeCommand->Record([&](VkCommandBuffer cmd) {
-        u32 srcQueue = m_Device->GetQueueFamily<RHI::QueueType::Graphics>();
-        u32 dstQueue = m_Device->GetQueueFamily<RHI::QueueType::Compute>();
-
-        if (storageTex->GetImage()->GetLayout() == VK_IMAGE_LAYOUT_UNDEFINED) {
-            srcQueue = VK_QUEUE_FAMILY_IGNORED;
-            dstQueue = VK_QUEUE_FAMILY_IGNORED;
-        }
-
-        storageTex->GetImage()->TransitionLayout(cmd,
-            VK_IMAGE_LAYOUT_GENERAL,
-            VK_PIPELINE_STAGE_2_NONE,
-            VK_PIPELINE_STAGE_2_RAY_TRACING_SHADER_BIT_KHR,
-            VK_ACCESS_2_NONE,
-            VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT,
-            srcQueue,
-            dstQueue
-        );
-
-        m_RayTracingPipeline->Bind(cmd);
-        m_BindlessHeap->Bind(cmd, VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR, m_RayTracingPipeline->GetLayout());
-
-        RHI::DescriptorWriter()
-            .WriteAS(0, m_TLAS->GetAS())
-            .WriteImage(1, storageTex->GetImage()->GetView(), VK_NULL_HANDLE, VK_IMAGE_LAYOUT_GENERAL, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE)
-            .WriteBuffer(2, camBuffer->GetBuffer(), camBuffer->GetSize(), 0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER)
-            .WriteBuffer(3, m_ObjectDescBuffer->GetBuffer(), m_ObjectDescBuffer->GetSize(), 0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER)
-            .WriteBuffer(4, m_MaterialBuffer->GetBuffer(), m_MaterialBuffer->GetSize(), 0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER)
-            .Push(cmd, VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR, m_RayTracingPipeline->GetLayout(), 1);
-
-        auto rgen = m_RayTracingPipeline->GetRGenRegion();
-        auto miss = m_RayTracingPipeline->GetMissRegion();
-        auto hit = m_RayTracingPipeline->GetHitRegion();
-        auto call = m_RayTracingPipeline->GetCallRegion();
-
-        auto extent = storageTex->GetImage()->GetExtent();
-
-        for (u32 y = 0; y < extent.height; y += m_TileSize) {
-            for (u32 x = 0; x < extent.width; x += m_TileSize) {
-                u32 width = std::min(m_TileSize, extent.width - x);
-                u32 height = std::min(m_TileSize, extent.height - y);
-
-                RTPushConstant pc {
-                    { x, y },
-                    { extent.width, extent.height }
-                };
-
-                vkCmdPushConstants(cmd, m_RayTracingPipeline->GetLayout(), VK_SHADER_STAGE_RAYGEN_BIT_KHR, 0, sizeof(RTPushConstant), &pc);
-                vkCmdTraceRaysKHR(cmd, &rgen, &miss, &hit, &call, width, height, 1);
-            }
-        }
-
-        storageTex->GetImage()->TransitionLayout(cmd,
-            VK_IMAGE_LAYOUT_GENERAL,
-            VK_PIPELINE_STAGE_2_RAY_TRACING_SHADER_BIT_KHR,
-            VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT,
-            VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT,
-            VK_ACCESS_2_NONE,
-            m_Device->GetQueueFamily<RHI::QueueType::Compute>(),
-            m_Device->GetQueueFamily<RHI::QueueType::Graphics>()
-        );
-    });
-
-    VkCommandBuffer graphicsCmd = m_GraphicsCommand->Record([&](VkCommandBuffer cmd) {
-        storageTex->GetImage()->TransitionLayout(cmd,
-            VK_IMAGE_LAYOUT_GENERAL,
-            VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT,
-            VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT,
-            VK_ACCESS_2_NONE,
-            VK_ACCESS_2_SHADER_STORAGE_READ_BIT,
-            m_Device->GetQueueFamily<RHI::QueueType::Compute>(),
-            m_Device->GetQueueFamily<RHI::QueueType::Graphics>()
-        );
-
-        auto swapchainImage = m_Swapchain->GetCurrentImage();
-
-        swapchainImage->TransitionLayout(cmd,
-            VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-            VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT,
-            VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
-            VK_ACCESS_2_NONE,
-            VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT
-        );
-
-        VkClearValue clearValue = {{{ 0.8f, 0.2f, 0.8f, 1.0f }}};
-
-        VkRenderingAttachmentInfo colorAttachment {
-            .sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
-            .imageView = swapchainImage->GetView(),
-            .imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-            .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
-            .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
-            .clearValue = clearValue
-        };
-
-        VkRenderingInfo renderingInfo {
-            .sType = VK_STRUCTURE_TYPE_RENDERING_INFO,
-            .renderArea = { { 0, 0 }, m_Swapchain->GetExtent() },
-            .layerCount = 1,
-            .colorAttachmentCount = 1,
-            .pColorAttachments = &colorAttachment
-        };
-
-        vkCmdBeginRendering(cmd, &renderingInfo);
-
-        m_GraphicsPipeline->Bind(cmd);
-        m_BindlessHeap->Bind(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, m_GraphicsPipeline->GetLayout());
-
-        RHI::DescriptorWriter()
-            .WriteImage(0, storageTex->GetImage()->GetView(), storageTex->GetSampler()->GetSampler(), VK_IMAGE_LAYOUT_GENERAL, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER)
-            .Push(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, m_GraphicsPipeline->GetLayout(), 1);
-
-        m_GraphicsPipeline->SetViewport(cmd, VkViewport {
-            .x = 0.0f, .y = 0.0f,
-            .width = static_cast<f32>(m_Swapchain->GetExtent().width),
-            .height = static_cast<f32>(m_Swapchain->GetExtent().height),
-            .minDepth = 0.0f,
-            .maxDepth = 1.0f
-        });
-
-        m_GraphicsPipeline->SetScissor(cmd, VkRect2D {
-            .offset = VkOffset2D { 0, 0 },
-            .extent = m_Swapchain->GetExtent()
-        });
-
-        vkCmdDraw(cmd, 3, 1, 0, 0);
-
-        vkCmdEndRendering(cmd);
-
-        swapchainImage->TransitionLayout(cmd,
-            VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
-            VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
-            VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT,
-            VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
-            VK_ACCESS_2_NONE
-        );
-
-        storageTex->GetImage()->TransitionLayout(cmd,
-            VK_IMAGE_LAYOUT_GENERAL,
-            VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT,
-            VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT,
-            VK_ACCESS_2_SHADER_STORAGE_READ_BIT,
-            VK_ACCESS_2_NONE,
-            m_Device->GetQueueFamily<RHI::QueueType::Graphics>(),
-            m_Device->GetQueueFamily<RHI::QueueType::Compute>()
-        );
-    });
-
-    VkSemaphoreSubmitInfo computeSignal = m_Device->Submit<RHI::QueueType::Compute>(computeCmd, {}, {});
-
-    std::vector<VkSemaphoreSubmitInfo> graphicsWait {
-        computeSignal,
-        m_Swapchain->GetAcquireWaitInfo()
-    };
-
-    std::vector<VkSemaphoreSubmitInfo> graphicsSignal {
-        m_Swapchain->GetPresentSignalInfo()
-    };
-
-    m_Device->Submit<RHI::QueueType::Graphics>(graphicsCmd, graphicsWait, graphicsSignal);
-
-    if (auto result = m_Swapchain->Present()) {
-        if (*result == VK_ERROR_OUT_OF_DATE_KHR) RecreateSwapchain();
-    }
+    // if (auto result = m_Swapchain->Present()) {
+    //     if (*result == VK_ERROR_OUT_OF_DATE_KHR) RecreateSwapchain();
+    // }
 }
 
 void Renderer::OnEvent(const Event& event)
@@ -340,18 +172,18 @@ void Renderer::LoadScene()
 
     m_VertexBuffer = RHI::Buffer::Stage(
         m_Device, *m_TransferCommand,
-        VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
+        VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
         model->vertices.size() * sizeof(Scene::Vertex),
         model->vertices.data(),
-        m_Device->GetQueueFamily<RHI::QueueType::Compute>()
+        m_Device->GetQueueFamily<RHI::QueueType::Graphics>()
     );
 
     m_IndexBuffer = RHI::Buffer::Stage(
         m_Device, *m_TransferCommand,
-        VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
+        VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
         model->indices.size() * sizeof(u32),
         model->indices.data(),
-        m_Device->GetQueueFamily<RHI::QueueType::Compute>()
+        m_Device->GetQueueFamily<RHI::QueueType::Graphics>()
     );
 
     std::vector<u32> textures;
@@ -417,28 +249,28 @@ void Renderer::LoadScene()
                 VK_ACCESS_2_TRANSFER_WRITE_BIT,
                 VK_ACCESS_2_NONE,
                 m_Device->GetQueueFamily<RHI::QueueType::Transfer>(),
-                m_Device->GetQueueFamily<RHI::QueueType::Compute>()
+                m_Device->GetQueueFamily<RHI::QueueType::Graphics>()
             );
         });
 
-        VkCommandBuffer computeCmd = m_ComputeCommand->Record([&](VkCommandBuffer cmd) {
+        VkCommandBuffer acquireCmd = m_GraphicsCommand->Record([&](VkCommandBuffer cmd) {
             image->TransitionLayout(cmd,
                 VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
                 VK_PIPELINE_STAGE_2_NONE,
-                VK_PIPELINE_STAGE_2_RAY_TRACING_SHADER_BIT_KHR,
+                VK_PIPELINE_STAGE_2_ALL_GRAPHICS_BIT,
                 VK_ACCESS_2_NONE,
                 VK_ACCESS_2_SHADER_READ_BIT,
                 m_Device->GetQueueFamily<RHI::QueueType::Transfer>(),
-                m_Device->GetQueueFamily<RHI::QueueType::Compute>()
+                m_Device->GetQueueFamily<RHI::QueueType::Graphics>()
             );
         });
 
-        auto semaphore = m_Device->Submit<RHI::QueueType::Transfer>(transferCmd, {}, {});
+        std::vector<VkSemaphoreSubmitInfo> signal {
+            m_Device->Submit<RHI::QueueType::Transfer>(transferCmd, {}, {})
+        };
 
-        std::vector<VkSemaphoreSubmitInfo> signal = { semaphore };
-        m_Device->Submit<RHI::QueueType::Compute>(computeCmd, signal, {});
-
-        m_Device->SyncTimeline<RHI::QueueType::Compute>();
+        m_Device->Submit<RHI::QueueType::Graphics>(acquireCmd, signal, {});
+        m_Device->SyncTimeline<RHI::QueueType::Graphics>();
 
         auto sampler = std::make_shared<RHI::Sampler>(m_Device, RHI::Sampler::Spec {
             .magFilter = VK_FILTER_LINEAR,
@@ -480,7 +312,7 @@ void Renderer::LoadScene()
         VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
         gpuMaterials.size() * sizeof(GPUMaterial),
         gpuMaterials.data(),
-        m_Device->GetQueueFamily<RHI::QueueType::Compute>()
+        m_Device->GetQueueFamily<RHI::QueueType::Graphics>()
     );
 
     std::vector<RenderObject> renderObjs;
@@ -507,10 +339,10 @@ void Renderer::LoadScene()
         VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
         renderObjs.size() * sizeof(RenderObject),
         renderObjs.data(),
-        m_Device->GetQueueFamily<RHI::QueueType::Compute>()
+        m_Device->GetQueueFamily<RHI::QueueType::Graphics>()
     );
 
-    VkCommandBuffer acquireCmd = m_ComputeCommand->Record([&](VkCommandBuffer cmd) {
+    VkCommandBuffer acquireCmd = m_GraphicsCommand->Record([&](VkCommandBuffer cmd) {
         std::vector<VkBufferMemoryBarrier2> barriers;
 
         auto AddBarrier = [&](VkBuffer buffer, VkDeviceSize size) {
@@ -519,10 +351,10 @@ void Renderer::LoadScene()
                 .pNext = nullptr,
                 .srcStageMask = VK_PIPELINE_STAGE_2_NONE,
                 .srcAccessMask = VK_ACCESS_2_NONE,
-                .dstStageMask = VK_PIPELINE_STAGE_2_ACCELERATION_STRUCTURE_BUILD_BIT_KHR | VK_PIPELINE_STAGE_2_RAY_TRACING_SHADER_BIT_KHR,
-                .dstAccessMask = VK_ACCESS_2_ACCELERATION_STRUCTURE_READ_BIT_KHR | VK_ACCESS_2_SHADER_STORAGE_READ_BIT,
+                .dstStageMask = VK_PIPELINE_STAGE_2_NONE,
+                .dstAccessMask = VK_ACCESS_2_NONE,
                 .srcQueueFamilyIndex = m_Device->GetQueueFamily<RHI::QueueType::Transfer>(),
-                .dstQueueFamilyIndex = m_Device->GetQueueFamily<RHI::QueueType::Compute>(),
+                .dstQueueFamilyIndex = m_Device->GetQueueFamily<RHI::QueueType::Graphics>(),
                 .buffer = buffer,
                 .offset = 0,
                 .size = size
@@ -549,51 +381,8 @@ void Renderer::LoadScene()
         vkCmdPipelineBarrier2(cmd, &dependency);
     });
 
-    m_Device->Submit<RHI::QueueType::Compute>(acquireCmd, {}, {});
-    m_Device->SyncTimeline<RHI::QueueType::Compute>();
-
-    m_BLASes.reserve(model->meshes.size());
-
-    for (const auto& mesh : model->meshes) {
-        std::vector<RHI::BLAS::Geometry> geometries;
-        geometries.reserve(mesh.primitives.size());
-
-        for (const auto& primitive : mesh.primitives) {
-            geometries.push_back(RHI::BLAS::Geometry {
-                .vertices = {
-                    .buffer = m_VertexBuffer.get(),
-                    .count = static_cast<u32>(model->vertices.size()),
-                    .stride = sizeof(Scene::Vertex),
-                    .offset = 0,
-                    .format = VK_FORMAT_R32G32B32_SFLOAT
-                },
-                .indices = {
-                    .buffer = m_IndexBuffer.get(),
-                    .count = primitive.indexCount,
-                    .offset = primitive.indexOffset * sizeof(u32)
-                },
-                .isOpaque = true
-            });
-        }
-
-        m_BLASes.push_back(std::make_unique<RHI::BLAS>(m_Device, *m_ComputeCommand, geometries));
-    }
-
-    std::vector<RHI::TLAS::Instance> tlasInstances;
-    tlasInstances.reserve(model->nodes.size());
-
-    for (const auto& node : model->nodes) {
-        tlasInstances.push_back(RHI::TLAS::Instance {
-            .blas = m_BLASes[node.meshIndex].get(),
-            .transform = node.transform,
-            .instanceCustomIndex = objIndices[node.meshIndex],
-            .mask = 0xFF,
-            .sbtOffset = 0,
-            .flags = VK_GEOMETRY_INSTANCE_TRIANGLE_FACING_CULL_DISABLE_BIT_KHR
-        });
-    }
-
-    m_TLAS = std::make_unique<RHI::TLAS>(m_Device, *m_ComputeCommand, tlasInstances);
+    m_Device->Submit<RHI::QueueType::Graphics>(acquireCmd, {}, {});
+    m_Device->SyncTimeline<RHI::QueueType::Graphics>();
 }
 
 void Renderer::RecreateSwapchain() const

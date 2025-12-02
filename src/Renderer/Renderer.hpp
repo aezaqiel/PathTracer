@@ -8,7 +8,6 @@
 #include "RHI/CommandContext.hpp"
 #include "RHI/Buffer.hpp"
 #include "RHI/Texture.hpp"
-#include "RHI/AccelerationStructure.hpp"
 #include "RHI/DescriptorManager.hpp"
 #include "RHI/Pipeline.hpp"
 
@@ -35,6 +34,19 @@ public:
     void OnEvent(const Event& event);
 
 private:
+    struct FrameData
+    {
+        std::unique_ptr<RHI::Buffer> camera;
+        struct
+        {
+            std::unique_ptr<RHI::Image> albedo;
+            std::unique_ptr<RHI::Image> normal;
+            std::unique_ptr<RHI::Image> position;
+            std::unique_ptr<RHI::Image> depth;
+        } GBuffer;
+    };
+
+private:
     void LoadScene();
     void RecreateSwapchain() const;
 
@@ -58,14 +70,10 @@ private:
 
     std::unique_ptr<RHI::BindlessHeap> m_BindlessHeap;
 
-    RHI::PerFrame<std::unique_ptr<RHI::Texture>> m_StorageTextures;
-    RHI::PerFrame<std::unique_ptr<RHI::Buffer>> m_CamBuffers;
+    RHI::PerFrame<FrameData> m_FrameData;
 
-    VkDescriptorSetLayout m_RTLayout { VK_NULL_HANDLE };
-    VkDescriptorSetLayout m_GLayout { VK_NULL_HANDLE };
-
-    std::unique_ptr<RHI::GraphicsPipeline> m_GraphicsPipeline;
-    std::unique_ptr<RHI::RayTracingPipelne> m_RayTracingPipeline;
+    VkDescriptorSetLayout m_GBufferLayout { VK_NULL_HANDLE };
+    std::unique_ptr<RHI::GraphicsPipeline> m_GBufferPipeline;
 
     std::unique_ptr<RHI::Buffer> m_VertexBuffer;
     std::unique_ptr<RHI::Buffer> m_IndexBuffer;
@@ -73,7 +81,4 @@ private:
     std::vector<std::unique_ptr<RHI::Texture>> m_SceneTextures;
     std::unique_ptr<RHI::Buffer> m_MaterialBuffer;
     std::unique_ptr<RHI::Buffer> m_ObjectDescBuffer;
-
-    std::vector<std::unique_ptr<RHI::BLAS>> m_BLASes;
-    std::unique_ptr<RHI::TLAS> m_TLAS;
 };

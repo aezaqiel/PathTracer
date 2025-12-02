@@ -99,13 +99,34 @@ namespace RHI {
         }
 
         std::vector<const char*> extensions {
-            VK_KHR_ACCELERATION_STRUCTURE_EXTENSION_NAME,
-            VK_KHR_RAY_TRACING_PIPELINE_EXTENSION_NAME,
-            VK_KHR_DEFERRED_HOST_OPERATIONS_EXTENSION_NAME,
             VK_KHR_SWAPCHAIN_EXTENSION_NAME,
             VK_KHR_PUSH_DESCRIPTOR_EXTENSION_NAME,
             VK_EXT_SCALAR_BLOCK_LAYOUT_EXTENSION_NAME
         };
+
+        // extensions.push_back(VK_KHR_ACCELERATION_STRUCTURE_EXTENSION_NAME);
+        // extensions.push_back(VK_KHR_RAY_TRACING_PIPELINE_EXTENSION_NAME);
+        // extensions.push_back(VK_KHR_DEFERRED_HOST_OPERATIONS_EXTENSION_NAME);
+
+        // VkPhysicalDeviceAccelerationStructureFeaturesKHR accelerationStructure {
+        //     .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ACCELERATION_STRUCTURE_FEATURES_KHR,
+        //     .pNext = nullptr,
+        //     .accelerationStructure = VK_TRUE,
+        //     .accelerationStructureCaptureReplay = VK_FALSE,
+        //     .accelerationStructureIndirectBuild = VK_FALSE,
+        //     .accelerationStructureHostCommands = VK_FALSE,
+        //     .descriptorBindingAccelerationStructureUpdateAfterBind = VK_TRUE
+        // };
+
+        // VkPhysicalDeviceRayTracingPipelineFeaturesKHR raytracing {
+        //     .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_PIPELINE_FEATURES_KHR,
+        //     .pNext = &accelerationStructure,
+        //     .rayTracingPipeline = VK_TRUE,
+        //     .rayTracingPipelineShaderGroupHandleCaptureReplay = VK_FALSE,
+        //     .rayTracingPipelineShaderGroupHandleCaptureReplayMixed = VK_FALSE,
+        //     .rayTracingPipelineTraceRaysIndirect = VK_FALSE,
+        //     .rayTraversalPrimitiveCulling = VK_FALSE
+        // };
 
         VkPhysicalDeviceScalarBlockLayoutFeatures scalarBlock {
             .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SCALAR_BLOCK_LAYOUT_FEATURES,
@@ -146,29 +167,9 @@ namespace RHI {
             .bufferDeviceAddressMultiDevice = VK_FALSE
         };
 
-        VkPhysicalDeviceAccelerationStructureFeaturesKHR accelerationStructure {
-            .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ACCELERATION_STRUCTURE_FEATURES_KHR,
-            .pNext = &bufferDeviceAddress,
-            .accelerationStructure = VK_TRUE,
-            .accelerationStructureCaptureReplay = VK_FALSE,
-            .accelerationStructureIndirectBuild = VK_FALSE,
-            .accelerationStructureHostCommands = VK_FALSE,
-            .descriptorBindingAccelerationStructureUpdateAfterBind = VK_TRUE
-        };
-
-        VkPhysicalDeviceRayTracingPipelineFeaturesKHR raytracing {
-            .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_PIPELINE_FEATURES_KHR,
-            .pNext = &accelerationStructure,
-            .rayTracingPipeline = VK_TRUE,
-            .rayTracingPipelineShaderGroupHandleCaptureReplay = VK_FALSE,
-            .rayTracingPipelineShaderGroupHandleCaptureReplayMixed = VK_FALSE,
-            .rayTracingPipelineTraceRaysIndirect = VK_FALSE,
-            .rayTraversalPrimitiveCulling = VK_FALSE
-        };
-
         VkPhysicalDeviceDynamicRenderingFeatures dynamicRendering {
             .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DYNAMIC_RENDERING_FEATURES,
-            .pNext = &raytracing,
+            .pNext = &bufferDeviceAddress,
             .dynamicRendering = VK_TRUE
         };
 
